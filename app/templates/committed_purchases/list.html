@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Committed Purchases — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page page--wide">
+  <div class="page-header">
+    <h1>Committed Purchases</h1>
+    <a class="btn btn--small" href="/committed-purchases/new">+ Add purchase</a>
+  </div>
+
+  {% if purchases %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th><th>Category</th><th>Status</th>
+          <th class="num">Remaining</th><th>Deadline</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="purchases-body">
+        {% for purchase in purchases %}{% include "committed_purchases/_row.html" %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="table-wrap empty-state">Nothing outstanding.</div>
+  {% endif %}
+</main>
+{% endblock %}

@@ -1,0 +1,17 @@
+<tr id="purchase-{{ purchase.id }}">
+  <td data-label="Name">{{ purchase.name }}</td>
+  <td data-label="Category">{{ purchase.category }}</td>
+  <td data-label="Status"><span class="badge">{{ purchase.status }}</span></td>
+  <td class="num" data-label="Remaining">{{ purchase.remaining_cents | money }}</td>
+  <td data-label="Deadline">{{ purchase.payment_deadline or "" }}</td>
+  <td class="actions">
+    <a class="btn-link" href="/committed-purchases/{{ purchase.id }}/edit">Edit</a>
+    <button
+      class="btn-link btn-link--danger"
+      hx-delete="/committed-purchases/{{ purchase.id }}"
+      hx-target="#purchase-{{ purchase.id }}"
+      hx-swap="outerHTML"
+      hx-confirm="Delete {{ purchase.name }}?"
+      type="button">Delete</button>
+  </td>
+</tr>

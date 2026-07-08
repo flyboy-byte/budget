@@ -1,0 +1,16 @@
+<tr id="income-event-{{ event.id }}">
+  <td data-label="Source">{{ event.source }}</td>
+  <td class="num" data-label="Amount">{{ event.expected_amount_cents | money }}</td>
+  <td data-label="Expected">{{ event.expected_date | human_date }}</td>
+  <td data-label="Confidence">{{ event.confidence }}</td>
+  <td class="actions">
+    <a class="btn-link" href="/income-events/{{ event.id }}/edit">Edit</a>
+    <button
+      class="btn-link btn-link--danger"
+      hx-delete="/income-events/{{ event.id }}"
+      hx-target="#income-event-{{ event.id }}"
+      hx-swap="outerHTML"
+      hx-confirm="Delete {{ event.source }}?"
+      type="button">Delete</button>
+  </td>
+</tr>

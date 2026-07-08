@@ -1,0 +1,32 @@
+{# Renders <tr> rows for a list of ledger `entries`. Shared by the full /ledger
+   page and the compact recent-activity list on the /activity hub, so the two can't
+   drift on how an entry is labelled or which direction its sign points.
+
+   'other' is the inflow type (income) -- same convention as
+   app/services/narrative.py's _INFLOW_TYPES. Everything else is money going out. #}
+{% for entry in entries %}
+  {% set is_inflow = entry.target_type == 'other' %}
+  <tr>
+    <td class="num text-muted">{{ entry.transaction_date | human_date }}</td>
+    <td>
+      {% if entry.target_type == 'obligation' %}
+        {{ entry.obligation_name or 'Bill' }}
+        <span class="badge">bill</span>
+      {% elif entry.target_type == 'committed_purchase' %}
+        {{ entry.purchase_name or 'Purchase' }}
+        <span class="badge">purchase</span>
+      {% elif entry.target_type == 'debt' %}
+        {{ entry.debt_name or 'Debt' }}
+        <span class="badge">debt</span>
+      {% elif entry.target_type == 'spending' %}
+        {{ entry.memo or 'Spending' }}
+        {% if entry.category %}<span class="badge">{{ entry.category }}</span>{% endif %}
+      {% else %}
+        {{ entry.memo or 'Other' }}
+        <span class="badge">income</span>
+      {% endif %}
+      {% if entry.account_name %}<small class="text-muted">· {{ entry.account_name }}</small>{% endif %}
+    </td>
+    <td class="num">{{ '+' if is_inflow else '−' }}{{ entry.amount_cents | money }}</td>
+  </tr>
+{% endfor %}

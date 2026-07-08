@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}Budget{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}">{% endif %}
+  <script src="/static/vendor/htmx.min.js"></script>
+  <script>
+    // Deliberately deferred to DOMContentLoaded: this script runs while the browser
+    // is still parsing <head>, before <body> exists at all -- document.body is null
+    // here, so document.body.addEventListener would throw immediately in every real
+    // browser (invisible to tests, since TestClient never executes JS).
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.addEventListener('htmx:configRequest', function (evt) {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta) { evt.detail.headers['X-CSRF-Token'] = meta.content; }
+      });
+    });
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        // One-time cleanup: earlier deploys registered '/static/sw.js' with no
+        // explicit scope, which defaults to '/static/' -- a scope that can never
+        // control an actual page, so navigator.serviceWorker.ready never resolved
+        // anywhere in the app. Drop any leftover registration like that before
+        // registering the corrected root-scoped worker.
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (reg) {
+            if (reg.scope.endsWith('/static/')) reg.unregister();
+          });
+        });
+        navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      });
+    }
+    // Badging API (desktop Chrome/Edge + iOS 16.4+ installed PWA only -- Android
+    // Chrome doesn't support this at all, feature-detected so it degrades invisibly.
+    document.addEventListener('DOMContentLoaded', function () {
+      var loggedIn = !!document.querySelector('meta[name="csrf-token"]');
+      if (loggedIn && 'setAppBadge' in navigator) {
+        fetch('/bank/unmatched-count').then(function (r) { return r.json(); }).then(function (data) {
+          if (data.count > 0) navigator.setAppBadge(data.count);
+          else navigator.clearAppBadge();
+        }).catch(function () {});
+      }
+    });
+    // Haptics (Android Chrome only -- iOS Safari has never supported the Vibration
+    // API; desktop has no vibration hardware regardless). One short pulse, never a
+    // pattern, never on page load -- only on an action the user just took.
+    function vibrateShort() {
+      if ('vibrate' in navigator) navigator.vibrate(60);
+    }
+    document.addEventListener('htmx:afterRequest', function (evt) {
+      if (evt.detail.successful && evt.detail.pathInfo.requestPath.indexOf('/today/') === 0) {
+        vibrateShort();
+      }
+    });
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', function (evt) {
+        if (evt.data && evt.data.type === 'vibrate') vibrateShort();
+      });
+    }
+  </script>
+</head>
+<body>
+  {% block body %}{% endblock %}
+</body>
+</html>

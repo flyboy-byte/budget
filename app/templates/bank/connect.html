@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Connect a Bank — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page page--narrow">
+  <h1>Connect a Bank</h1>
+  <p class="text-muted mt-0 mb-4">
+    This app never collects your bank credentials directly and there's no in-app
+    bank-linking flow — you've already had to create a free
+    <a href="https://bridge.simplefin.org" target="_blank" rel="noopener">SimpleFIN Bridge</a>
+    account and link your bank(s) there first. Paste the Setup Token it gave you below.
+    That's a one-time cost per bank; what this eliminates is the <em>ongoing</em> manual
+    balance-typing after that, not the initial setup.
+  </p>
+
+  {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
+
+  <div class="card">
+    <form method="post" action="/bank/connect">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="label">Label</label>
+        <input type="text" id="label" name="label" value="{{ label }}" placeholder="Chase checking" required>
+      </div>
+      <div class="field">
+        <label for="setup_token">Setup Token</label>
+        <textarea id="setup_token" name="setup_token" rows="3" required></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn" type="submit">Claim &amp; connect</button>
+        <a class="btn-link" href="/bank">Cancel</a>
+      </div>
+    </form>
+  </div>
+</main>
+{% endblock %}

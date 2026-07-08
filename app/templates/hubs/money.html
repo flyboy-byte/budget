@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Money — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <h1>Money</h1>
+  <p class="text-muted mt-0 mb-4">What you have, and what you owe.</p>
+
+  <div class="hub-grid">
+    <a class="hub-card" href="/accounts">
+      <p class="hub-card__title">Accounts</p>
+      <p class="hub-card__stat">
+        {{ account_count }} active · {{ cash_on_hand_cents | money }} on hand
+        {% if stale_account_count %}
+          <span class="badge badge--warning">{{ stale_account_count }} not updated in a while</span>
+        {% endif %}
+      </p>
+      <p class="hub-card__desc">Checking, savings, cash</p>
+    </a>
+    <a class="hub-card" href="/debts">
+      <p class="hub-card__title">Debts</p>
+      <p class="hub-card__stat">
+        {{ debt_count }} active · {{ total_debt_cents | money }} owed
+        {% if stale_debt_count %}
+          <span class="badge badge--warning">{{ stale_debt_count }} not updated in a while</span>
+        {% endif %}
+      </p>
+      <p class="hub-card__desc">Cards, loans, BNPL — ranked by what to pay down first</p>
+    </a>
+    <a class="hub-card" href="/obligations">
+      <p class="hub-card__title">Bills</p>
+      <p class="hub-card__stat">{{ bill_count }} unpaid</p>
+      <p class="hub-card__desc">Rent, utilities, anything with a due date</p>
+    </a>
+    <a class="hub-card" href="/bank/suggestions">
+      <p class="hub-card__title">Detected Bills</p>
+      <p class="hub-card__stat">
+        {% if bill_suggestion_count %}
+          <span class="badge badge--warning">{{ bill_suggestion_count }} found</span>
+        {% else %}
+          scan history
+        {% endif %}
+      </p>
+      <p class="hub-card__desc">Find repeating charges in your bank history and add them as bills with one tap</p>
+    </a>
+    <a class="hub-card" href="/bank">
+      <p class="hub-card__title">Bank Sync</p>
+      <p class="hub-card__stat">
+        {{ bank_connection_count }} connected
+        {% if bank_pending_review_count %}
+          <span class="badge badge--warning">{{ bank_pending_review_count }} to review</span>
+        {% endif %}
+        {% if bank_unmatched_transaction_count %}
+          <span class="badge badge--warning">{{ bank_unmatched_transaction_count }} to match</span>
+        {% endif %}
+      </p>
+      <p class="hub-card__desc">Pull balances from SimpleFIN instead of retyping them</p>
+    </a>
+  </div>
+</main>
+{% endblock %}

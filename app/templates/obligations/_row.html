@@ -1,0 +1,16 @@
+<tr id="obligation-{{ obligation.id }}">
+  <td data-label="Name">{{ obligation.name }}</td>
+  <td data-label="Category">{{ obligation.category }}</td>
+  <td class="num" data-label="Amount">{{ obligation.amount_cents | money }}</td>
+  <td data-label="Due">{{ obligation.due_date | human_date }}</td>
+  <td class="actions">
+    <a class="btn-link" href="/obligations/{{ obligation.id }}/edit">Edit</a>
+    <button
+      class="btn-link btn-link--danger"
+      hx-delete="/obligations/{{ obligation.id }}"
+      hx-target="#obligation-{{ obligation.id }}"
+      hx-swap="outerHTML"
+      hx-confirm="Delete {{ obligation.name }}?"
+      type="button">Delete</button>
+  </td>
+</tr>

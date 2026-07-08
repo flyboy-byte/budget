@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if debt else "New" }} Debt — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page page--narrow">
+  <h1>{{ "Edit" if debt else "New" }} Debt</h1>
+  <div class="card">
+    {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
+    {% if info %}<div class="alert alert--info">{{ info }}</div>{% endif %}
+    <form method="post" action="{{ action }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{{ debt.name if debt else '' }}" required>
+      </div>
+      <div class="field">
+        <label for="type">Type</label>
+        <select id="type" name="type">
+          {% for t in debt_types %}
+            <option value="{{ t }}" {% if debt and debt.type == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="balance">Balance ($)</label>
+        <input type="number" step="0.01" min="0" id="balance" name="balance"
+               value="{{ '%.2f'|format(debt.balance_cents / 100) if debt else '0.00' }}" required>
+      </div>
+      <div class="field">
+        <label for="minimum_payment">Minimum payment ($)</label>
+        <input type="number" step="0.01" min="0" id="minimum_payment" name="minimum_payment"
+               value="{{ '%.2f'|format(debt.minimum_payment_cents / 100) if debt else '0.00' }}" required>
+      </div>
+      <div class="field">
+        <label for="apr">APR % (leave blank if unknown)</label>
+        <input type="number" step="0.01" min="0" id="apr" name="apr"
+               value="{{ '%.2f'|format(debt.apr_bps / 100) if debt and debt.apr_bps is not none else '' }}">
+      </div>
+      <div class="field">
+        <label for="next_due_date">Next due date</label>
+        <input type="date" id="next_due_date" name="next_due_date" value="{{ debt.next_due_date if debt and debt.next_due_date else '' }}">
+      </div>
+      <div class="field">
+        <label for="interest_status">Interest status</label>
+        <select id="interest_status" name="interest_status">
+          {% for s in interest_statuses %}
+            <option value="{{ s }}" {% if debt and debt.interest_status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field checkbox-field">
+        <input type="checkbox" id="is_flexible_payment" name="is_flexible_payment" value="1" {% if debt and debt.is_flexible_payment %}checked{% endif %}>
+        <label for="is_flexible_payment">Flexible payment (no fixed schedule pressure)</label>
+      </div>
+      <div class="field">
+        <label for="priority">Manual priority override (0 = none)</label>
+        <input type="number" id="priority" name="priority" value="{{ debt.priority if debt else 0 }}">
+      </div>
+      {% if debt %}
+      <div class="field checkbox-field">
+        <input type="checkbox" id="is_active" name="is_active" value="1" {% if debt.is_active %}checked{% endif %}>
+        <label for="is_active">Active</label>
+      </div>
+      {% endif %}
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes">{{ debt.notes if debt and debt.notes else '' }}</textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn" type="submit">Save</button>
+        <a class="btn-link" href="/debts">Cancel</a>
+      </div>
+    </form>
+  </div>
+</main>
+{% endblock %}

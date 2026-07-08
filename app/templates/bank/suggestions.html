@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Detected Bills — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <div class="page-header">
+    <h1>Detected Bills</h1>
+    <a class="btn-link" href="/money">Back to money</a>
+  </div>
+  <p class="text-muted mt-0 mb-4">
+    Charges that look like they repeat, found in your bank history. Tap <strong>Add
+    as bill</strong> and it becomes a recurring obligation — no typing. Anything you
+    add here starts counting against safe-to-spend as its due date approaches.
+  </p>
+
+  {% if scan_errors %}
+    <div class="alert alert--error">
+      {% for err in scan_errors %}<p class="mt-0 mb-0">{{ err }}</p>{% endfor %}
+    </div>
+  {% endif %}
+
+  {% if suggestions %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Merchant</th>
+            <th class="num">Typical amount</th>
+            <th>Repeats</th>
+            <th>Next due</th>
+            <th class="num">Seen</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in suggestions %}
+            <tr>
+              <td>
+                {{ s.merchant }}
+                <br><small class="text-muted">{{ s.sample_description }}</small>
+              </td>
+              <td class="num">{{ s.amount_cents | money }}</td>
+              <td>{{ s.recurrence_rule }}</td>
+              <td>{{ s.next_due_date | human_date }}</td>
+              <td class="num">{{ s.occurrence_count }}&times;</td>
+              <td>
+                <form method="post" action="/bank/suggestions/accept" class="inline-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="merchant" value="{{ s.merchant }}">
+                  <input type="hidden" name="amount_cents" value="{{ s.amount_cents }}">
+                  <input type="hidden" name="recurrence_rule" value="{{ s.recurrence_rule }}">
+                  <input type="hidden" name="next_due_date" value="{{ s.next_due_date }}">
+                  <button class="btn btn--small" type="submit">Add as bill</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="table-wrap empty-state">
+      {% if deep_scanned %}
+        Nothing repeating found in {{ scan_days }} days of history
+        ({{ scanned_count }} transactions checked). A charge has to show up at least
+        twice, at a steady amount, on a weekly/biweekly/monthly rhythm before it
+        counts — one-off buys and variable spending at the same shop are skipped on
+        purpose.
+      {% else %}
+        Nothing repeating in the {{ scanned_count }} transaction(s) stored locally yet.
+        Scan further back to give this something to work with.
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <form method="post" action="/bank/suggestions/scan" class="mt-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn" type="submit">Scan 120 days of bank history</button>
+    <p class="text-muted mt-2 mb-0">
+      <small>Reads directly from your bank connection and looks for patterns. Nothing
+      is saved or added to your match queue — it only shows suggestions.</small>
+    </p>
+  </form>
+</main>
+{% endblock %}

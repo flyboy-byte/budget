@@ -1,0 +1,614 @@
+/* ===== Design tokens =====
+   Dark-only by decision (design/VISUAL_SPEC.md, 2026-09-02) -- the user has only
+   ever used this app in dark mode, so there is no light branch or
+   prefers-color-scheme query to maintain for a single-user app. Token *names*
+   are unchanged from the old light palette; only the values moved. --accent/
+   --bad/--good sit at the same lightness and chroma, hue-rotated, so the two
+   signal colors carry the same visual weight as the accent instead of
+   shouting over it -- and never flood a large area, only a line, a mark, or
+   one bar segment. */
+:root {
+  --bg: #161826;
+  --bg-elevated: #232532;
+  --border: #2f313e;
+  --text: #e9e9ed;
+  --text-muted: #9fa0a7;
+  --text-faint: #75768a;
+  --accent: #9184d9;
+  --accent-hover: #a89ee3;
+  --accent-soft: #363650;
+  --good: #5fae8c;
+  --good-soft: #2e3e42;
+  --bad: #cf7f77;
+  --bad-soft: #42353e;
+  --warn: #c2975c;
+  --warn-soft: #40372e;
+
+  /* Collapsed from a 6/10/14px trio to one radius everywhere. */
+  --radius-sm: 8px;
+  --radius: 8px;
+  --radius-lg: 8px;
+  /* Elevation on a dark ground is an edge plus ambient darkness, not a big soft
+     blur -- these are deliberately flatter than the old light-mode shadows. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.45);
+
+  /* 0.7x density scale -- dense on purpose. */
+  --space-1: 2.8px;
+  --space-2: 5.6px;
+  --space-3: 8.4px;
+  --space-4: 11.2px;
+  --space-5: 16.8px;
+  --space-6: 22.4px;
+  --space-7: 39.2px;
+
+  color-scheme: dark;
+}
+
+/* ===== Reset & base ===== */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { line-height: 1.25; margin: 0 0 var(--space-3); }
+h1 { font-size: 1.5rem; font-weight: 700; }
+h2 { font-size: 1.1rem; font-weight: 600; }
+p { margin: 0 0 var(--space-3); }
+small { color: var(--text-muted); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+[disabled] { opacity: 0.45; }
+
+/* ===== Layout ===== */
+.page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-7);
+}
+.page--wide { max-width: 56rem; }
+.page--narrow { max-width: 26rem; }
+.page--dashboard { max-width: 72.5rem; }
+
+/* Two-column dashboard (design/UI_AUDIT.md A4): main + a max-360px rail above
+   ~860px, one column below so the installed PWA never sees the split. #dashboard-
+   summary is the htmx OOB-swap target for every /today/* quick action -- it has
+   to stay ONE DOM node so a single swap can atomically refresh both the hero and
+   the rail together, so it can't be the grid container itself (that would force
+   its swappable contents into one rectangular cell). `display: contents` makes
+   its two children (.dashboard-main, .dashboard-rail) act as direct items of the
+   *outer* .dashboard-grid instead, so they can sit in separate columns while
+   .dashboard-quick (outside the swap, so mid-typed quick-action forms are never
+   reset by someone else's action) still lines up underneath the hero. */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  grid-template-areas: "main rail" "quick rail";
+  gap: var(--space-5);
+  align-items: start;
+}
+#dashboard-summary { display: contents; }
+.dashboard-main { grid-area: main; min-width: 0; }
+.dashboard-rail { grid-area: rail; min-width: 0; }
+.dashboard-quick { grid-area: quick; }
+
+@media (max-width: 860px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas: "main" "rail" "quick";
+  }
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+
+/* ===== Nav ===== */
+.nav {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.nav__inner {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.nav__link {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+}
+.nav__link:hover {
+  color: var(--text);
+  background: var(--bg);
+  text-decoration: none;
+}
+.nav__link--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.nav__icon {
+  display: none;
+  width: 22px;
+  height: 22px;
+}
+.nav__label { line-height: 1; }
+
+/* ===== Standalone-mode app shell (installed PWA only -- a normal browser
+   tab is completely unaffected by any of this) ===== */
+@media (display-mode: standalone) {
+  html, body {
+    overscroll-behavior: none;
+  }
+  .nav {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-bottom: none;
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .nav__inner {
+    justify-content: space-around;
+    padding: var(--space-2) var(--space-2);
+  }
+  .nav__link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    padding: var(--space-1) var(--space-1);
+  }
+  .nav__icon { display: block; }
+  .nav__label { font-size: 0.6875rem; }
+  body { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* ===== Cards & sections ===== */
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-5);
+}
+.card--dashed {
+  border-style: dashed;
+  box-shadow: none;
+}
+.card--danger { border-color: var(--bad); }
+.card--notifications {
+  border-top: 3px solid var(--accent);
+}
+.notif-block { margin-bottom: var(--space-4); }
+.notif-block__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  margin: 0 0 var(--space-2);
+}
+
+/* The hero card (dashboard's safe-to-spend figure) used to carry a gradient top
+   bar, a tinted background and a deeper shadow to stand out from routine cards.
+   Per design/UI_AUDIT.md A3 / VISUAL_SPEC.md (no gradient headers, no stacked
+   shadows -- elevation is an edge plus ambient darkness): it's now the same flat
+   card treatment as everything else, letting the composition bar and the number
+   itself do the work of standing out instead of extra chrome. The negative state
+   keeps one quiet cue -- a border color change, nothing louder. */
+.card--hero-negative { border-color: var(--bad); }
+
+.hero-stat__label {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 0 0 var(--space-1);
+  font-weight: 500;
+}
+.hero-stat__value {
+  font-size: 3rem;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+.hero-stat__value--negative { color: var(--bad); }
+.hero-stat__value--stale { color: var(--text-faint); }
+.dim-stale { opacity: 0.55; }
+.dim-first-run { opacity: 0.22; }
+.hero-stat__value--small { font-size: 1.5rem; font-weight: 700; }
+.sparkline { margin: var(--space-3) 0; }
+.sparkline svg { display: block; }
+.hero-stat__note {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: var(--space-2) 0 0;
+}
+/* Same look as .hero-stat__note, but for an annotation inside a table cell
+   (e.g. the debt-priority table's "why this ranked first" line) -- named for
+   where it's used instead of borrowing a hero-card-specific class (UI_AUDIT A9). */
+.table-note {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* Composition bar (design/UI_AUDIT.md A3): what safe-to-spend is made of, stated
+   once as a bar instead of three times as prose. The three reserved categories
+   get a quiet neutral ramp; --accent is reserved for exactly one segment ("free"
+   when healthy, "covered" when negative) per VISUAL_SPEC's rule that the accent
+   marks a thing, not a category. "Not covered" is a hatched pattern in --bad,
+   not a solid fill -- it's a gap, not a category of spending. */
+.composition-bar {
+  display: flex;
+  height: 10px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg);
+  margin: var(--space-3) 0 var(--space-2);
+}
+.composition-bar__segment { height: 100%; }
+.composition-bar__segment--bills { background: #3a3d4d; }
+.composition-bar__segment--debts { background: #4a4e63; }
+.composition-bar__segment--purchases { background: #5a5f79; }
+.composition-bar__segment--free,
+.composition-bar__segment--covered { background: var(--accent); }
+.composition-bar__segment--uncovered {
+  background-color: var(--bg);
+  background-image: repeating-linear-gradient(
+    45deg, var(--bad-soft), var(--bad-soft) 3px, transparent 3px, transparent 6px
+  );
+}
+
+.composition-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+.composition-legend li { display: flex; align-items: center; gap: var(--space-1); }
+.composition-legend__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+  flex: none;
+}
+.composition-legend__swatch--bills { background: #3a3d4d; }
+.composition-legend__swatch--debts { background: #4a4e63; }
+.composition-legend__swatch--purchases { background: #5a5f79; }
+.composition-legend__swatch--free,
+.composition-legend__swatch--covered { background: var(--accent); }
+.composition-legend__swatch--uncovered {
+  background-color: var(--bg);
+  background-image: repeating-linear-gradient(
+    45deg, var(--bad-soft), var(--bad-soft) 2px, transparent 2px, transparent 4px
+  );
+  border: 1px solid var(--bad-soft);
+}
+
+.section {
+  margin-bottom: var(--space-5);
+}
+.section h2 {
+  font-size: 0.9375rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+.stat-tile {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+}
+.stat-tile__label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0 0 var(--space-1);
+}
+.stat-tile__value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* ===== Tables ===== */
+.table-wrap {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+thead th {
+  text-align: left;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+tbody td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--bg); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.actions { text-align: right; white-space: nowrap; }
+
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: var(--space-6) var(--space-4);
+}
+
+/* ===== Forms ===== */
+.field { margin-bottom: var(--space-4); }
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0 var(--space-4);
+}
+.field-grid .field { margin-bottom: var(--space-4); }
+.field label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+.field small { display: block; margin-top: var(--space-1); font-size: 0.75rem; }
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+select,
+textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+}
+textarea { min-height: 4.5rem; resize: vertical; }
+
+.checkbox-field { display: flex; align-items: center; gap: var(--space-2); }
+.checkbox-field label { margin: 0; font-weight: 500; }
+input[type="checkbox"] { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  cursor: pointer;
+  background: transparent;
+  color: var(--accent);
+}
+/* Primary buttons are an accent outline, not a fill (design/VISUAL_SPEC.md) --
+   no large area gets flooded with the accent color, only lines and marks. */
+.btn:hover { background: var(--accent-soft); text-decoration: none; }
+.btn:active { background: var(--accent-soft); border-color: var(--accent-hover); }
+.btn--secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+.btn--secondary:hover { background: var(--bg); }
+.btn--danger { background: transparent; color: var(--bad); border-color: transparent; }
+.btn--danger:hover { background: var(--bad-soft); }
+.btn--danger-solid { background: var(--bad); color: var(--bg); border-color: var(--bad); }
+.btn--danger-solid:hover { background: var(--bad); opacity: 0.9; }
+.btn--small { padding: var(--space-1) var(--space-2); font-size: 0.8125rem; }
+.btn--block { width: 100%; }
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+}
+.btn-link:hover { text-decoration: underline; }
+.btn-link--danger { color: var(--text-faint); }
+.btn-link--danger:hover { color: var(--bad); }
+
+/* ===== Alerts / badges ===== */
+.alert {
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  font-size: 0.875rem;
+}
+.alert--error { background: var(--bad-soft); color: var(--bad); }
+.alert--success { background: var(--good-soft); color: var(--good); }
+.alert--info { background: var(--warn-soft); color: var(--warn); }
+
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.badge--risky { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.badge--safe { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.badge--warning { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.badge--accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+/* ===== Login ===== */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+.login-card { width: 100%; max-width: 22rem; }
+.login-card h1 { text-align: center; }
+
+/* ===== Utility ===== */
+.text-muted { color: var(--text-muted); }
+.text-good { color: var(--good); }
+.text-bad { color: var(--bad); }
+.mt-0 { margin-top: 0; }
+.mt-2 { margin-top: var(--space-2); }
+.mt-4 { margin-top: var(--space-4); }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-4 { margin-bottom: var(--space-4); }
+.text-center { text-align: center; }
+.confirm-link { margin: var(--space-4) 0 0; }
+.inline-form { display: inline-block; margin-left: var(--space-2); }
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-3);
+}
+/* A8: .card's own margin-bottom was stacking with the grid's gap, tripling the
+   vertical gutter versus the horizontal one. Let gap own spacing in this
+   context; .card keeps its margin-bottom for plain (non-grid) stacking. */
+.hub-grid > .card { margin-bottom: 0; }
+.hub-card {
+  display: block;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+.hub-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+.hub-card__title { font-size: 1.05rem; font-weight: 700; margin: 0 0 var(--space-1); }
+.hub-card__stat { font-size: 0.9375rem; color: var(--text); font-weight: 600; margin: 0 0 var(--space-1); }
+.hub-card__desc { font-size: 0.8125rem; color: var(--text-muted); margin: 0; }
+/* Same look as .hub-card__title, but for a plain form's heading -- e.g. the
+   quick-action cards on /today, which sit in a .card, not a .hub-card link tile
+   (UI_AUDIT A9). */
+.form-title { font-size: 1.05rem; font-weight: 700; margin: 0 0 var(--space-1); }
+
+.hint-note { font-size: 0.8125rem; color: var(--text-muted); margin-top: calc(-1 * var(--space-3)); margin-bottom: var(--space-4); }
+.csv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.csv-list li {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.csv-list a { display: block; padding: var(--space-1) var(--space-3); font-size: 0.875rem; }
+.csv-list a:hover { text-decoration: none; color: var(--accent-hover); }
+.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+@media (max-width: 40rem) {
+  .hero-stat__value { font-size: 2rem; }
+  thead { display: none; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) var(--space-4);
+  }
+  tbody tr:hover { background: none; }
+  tbody td {
+    border-bottom: none;
+    padding: var(--space-1) 0;
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  tbody td::before {
+    content: attr(data-label);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  td.actions { justify-content: flex-end; }
+  td.actions::before { content: none; }
+}
+
+@view-transition {
+  navigation: auto;
+}

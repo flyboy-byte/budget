@@ -1,0 +1,199 @@
+<div id="dashboard-summary" hx-swap-oob="true">
+  <div class="dashboard-main">
+  {% if is_first_run %}
+  <section class="card card--hero dim-first-run">
+    <p class="hero-stat__label">Safe to spend right now</p>
+    <p class="hero-stat__value">{{ safe_to_spend_cents | money }}</p>
+  </section>
+  {% else %}
+  <section class="card card--hero{% if safe_to_spend_cents < 0 and not is_stale %} card--hero-negative{% endif %}">
+    <div class="flex-between">
+      <p class="hero-stat__label">Safe to spend right now</p>
+      {% if is_stale %}
+        <span class="badge badge--warning">Stale</span>
+      {% else %}
+        <span class="badge {% if safe_to_spend_cents < 0 %}badge--risky{% else %}badge--safe{% endif %}">
+          {% if safe_to_spend_cents < 0 %}Negative{% else %}On track{% endif %}
+        </span>
+      {% endif %}
+    </div>
+    <p class="hero-stat__value{% if is_stale %} hero-stat__value--stale{% elif safe_to_spend_cents < 0 %} hero-stat__value--negative{% endif %}">
+      {{ safe_to_spend_cents | money }}
+    </p>
+    {% if is_stale %}
+      <p class="hero-stat__note mt-0">as of {{ stale_oldest_days }} day{{ 's' if stale_oldest_days != 1 else '' }} ago</p>
+    {% elif trend_delta_cents is not none %}
+      <p class="hero-stat__note mt-0">
+        <span class="{{ 'text-good' if trend_delta_cents >= 0 else 'text-bad' }}">
+          {{ '+' if trend_delta_cents >= 0 else '' }}{{ trend_delta_cents | money }}
+        </span> over the last {{ trend_days }} day{{ 's' if trend_days != 1 else '' }}
+      </p>
+    {% endif %}
+    {% if change_narrative and not is_stale %}
+      <p class="hero-stat__note mt-0 text-muted">{{ change_narrative }}</p>
+    {% endif %}
+    {% if sparkline_svg %}
+      <div class="sparkline">{{ sparkline_svg | safe }}</div>
+    {% endif %}
+    {% if is_stale %}
+      <div class="composition-bar dim-stale">
+        {% if obligations_reserved_cents > 0 %}<div class="composition-bar__segment composition-bar__segment--bills" style="width: {{ bills_pct }}%"></div>{% endif %}
+        {% if debts_reserved_cents > 0 %}<div class="composition-bar__segment composition-bar__segment--debts" style="width: {{ debts_pct }}%"></div>{% endif %}
+        {% if purchases_reserved_cents > 0 %}<div class="composition-bar__segment composition-bar__segment--purchases" style="width: {{ purchases_pct }}%"></div>{% endif %}
+        <div class="composition-bar__segment composition-bar__segment--free" style="width: {{ free_pct }}%"></div>
+      </div>
+      <ul class="composition-legend dim-stale">
+        {% if obligations_reserved_cents > 0 %}<li><span class="composition-legend__swatch composition-legend__swatch--bills"></span>Bills {{ obligations_reserved_cents | money }}</li>{% endif %}
+        {% if debts_reserved_cents > 0 %}<li><span class="composition-legend__swatch composition-legend__swatch--debts"></span>Debt minimums {{ debts_reserved_cents | money }}</li>{% endif %}
+        {% if purchases_reserved_cents > 0 %}<li><span class="composition-legend__swatch composition-legend__swatch--purchases"></span>Committed purchases {{ purchases_reserved_cents | money }}</li>{% endif %}
+        <li><span class="composition-legend__swatch composition-legend__swatch--free"></span>Free {{ free_display_cents | money }}</li>
+      </ul>
+      <p class="hero-stat__note">This number is running on old balances. Doesn't include future paychecks.</p>
+    {% elif safe_to_spend_cents < 0 %}
+      <p class="hero-stat__note text-bad">
+        You need {{ (-safe_to_spend_cents) | money }} more to cover what's reserved.
+      </p>
+      <div class="composition-bar">
+        <div class="composition-bar__segment composition-bar__segment--covered" style="width: {{ covered_pct }}%"></div>
+        <div class="composition-bar__segment composition-bar__segment--uncovered" style="width: {{ uncovered_pct }}%"></div>
+      </div>
+      <ul class="composition-legend">
+        <li><span class="composition-legend__swatch composition-legend__swatch--covered"></span>Covered {{ cash_on_hand_cents | money }}</li>
+        <li><span class="composition-legend__swatch composition-legend__swatch--uncovered"></span>Not covered {{ (-safe_to_spend_cents) | money }}</li>
+      </ul>
+      <p class="hero-stat__note">Doesn't include future paychecks.</p>
+    {% else %}
+      <div class="composition-bar">
+        {% if obligations_reserved_cents > 0 %}<div class="composition-bar__segment composition-bar__segment--bills" style="width: {{ bills_pct }}%"></div>{% endif %}
+        {% if debts_reserved_cents > 0 %}<div class="composition-bar__segment composition-bar__segment--debts" style="width: {{ debts_pct }}%"></div>{% endif %}
+        {% if purchases_reserved_cents > 0 %}<div class="composition-bar__segment composition-bar__segment--purchases" style="width: {{ purchases_pct }}%"></div>{% endif %}
+        <div class="composition-bar__segment composition-bar__segment--free" style="width: {{ free_pct }}%"></div>
+      </div>
+      <ul class="composition-legend">
+        {% if obligations_reserved_cents > 0 %}<li><span class="composition-legend__swatch composition-legend__swatch--bills"></span>Bills {{ obligations_reserved_cents | money }}</li>{% endif %}
+        {% if debts_reserved_cents > 0 %}<li><span class="composition-legend__swatch composition-legend__swatch--debts"></span>Debt minimums {{ debts_reserved_cents | money }}</li>{% endif %}
+        {% if purchases_reserved_cents > 0 %}<li><span class="composition-legend__swatch composition-legend__swatch--purchases"></span>Committed purchases {{ purchases_reserved_cents | money }}</li>{% endif %}
+        <li><span class="composition-legend__swatch composition-legend__swatch--free"></span>Free {{ free_display_cents | money }}</li>
+      </ul>
+      <p class="hero-stat__note">
+        {% if next_due_payment %}You're okay until {{ next_due_payment.due_date | human_date }}. {% endif %}Doesn't include future paychecks.
+      </p>
+    {% endif %}
+    {% if is_stale %}
+      <div class="alert alert--info mt-4">
+        <p class="mt-0">
+          {% for row in stale_rows %}{{ row.name }} last updated {{ row.days }} day{{ 's' if row.days != 1 else '' }} ago{{ "; " if not loop.last }}{% endfor %}.
+        </p>
+        <p class="mt-2"><a href="/accounts">Update balances</a> &middot; <a href="/bank">Sync from bank</a></p>
+      </div>
+    {% endif %}
+  </section>
+  {% endif %}
+  </div>
+
+  <div class="dashboard-rail">
+  {% if is_first_run %}
+  <div class="section">
+    <h2>Get set up</h2>
+    <p class="mt-0 text-muted mb-4">About four minutes, three steps, and the number above starts meaning something.</p>
+    <ol class="onboarding-steps">
+      <li class="card mt-0 mb-3">
+        <p class="hero-stat__label">1. Add an account</p>
+        <p class="mt-0">The only required step — checking, savings, cash, whatever holds your money.</p>
+        <a class="btn btn--small" href="/accounts/new">Add account</a>
+      </li>
+      <li class="card mt-0 mb-3">
+        <p class="hero-stat__label">2. Add what's already committed</p>
+        <p class="mt-0">Bills, debt minimums, purchases you've made but haven't paid off yet. <strong>This is what makes the number above differ from your bank balance</strong> — it's the whole point of this app.</p>
+        <a class="btn btn--small" href="/obligations/new">Add a bill</a>
+        <a class="btn btn--small btn--secondary" href="/debts/new">Add a debt</a>
+      </li>
+      <li class="card mt-0">
+        <p class="hero-stat__label">3. Set the reserve window</p>
+        <p class="mt-0">How far ahead to hold money back for what's coming due. We recommend your next paycheck.</p>
+        <a class="btn btn--small" href="/settings">Go to settings</a>
+      </li>
+    </ol>
+  </div>
+  {% else %}
+  <div class="{{ 'dim-stale' if is_stale }}">
+  {% if is_stale %}<p class="hero-stat__note mt-0">as of {{ stale_oldest_days }} day{{ 's' if stale_oldest_days != 1 else '' }} ago</p>{% endif %}
+  <div class="card mt-0">
+    <div class="compare-grid">
+      <div>
+        <p class="hero-stat__label">Cash on hand</p>
+        <p class="hero-stat__value hero-stat__value--small">{{ cash_on_hand_cents | money }}</p>
+      </div>
+      <div>
+        <p class="hero-stat__label">Total debt</p>
+        <p class="hero-stat__value hero-stat__value--small">{{ total_debt_cents | money }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <p class="stat-tile__label">Net position</p>
+      <p class="stat-tile__value">{{ net_position_cents | money }}</p>
+    </div>
+  </div>
+  </div>
+
+  <div class="section">
+    <h2>Next paycheck</h2>
+    {% if next_paycheck %}
+      <p class="mt-0">{{ next_paycheck.source }} — {{ next_paycheck.expected_amount_cents | money }} on {{ next_paycheck.expected_date | human_date }}</p>
+    {% else %}
+      <p class="mt-0 text-muted">No upcoming income logged.</p>
+    {% endif %}
+  </div>
+
+  <div class="section">
+    <h2>Next due payment</h2>
+    {% if next_due_payment %}
+      <p class="mt-0">{{ next_due_payment.name }} ({{ next_due_payment.kind }}) — {{ next_due_payment.amount_cents | money }} due {{ next_due_payment.due_date | human_date }}</p>
+    {% else %}
+      <p class="mt-0 text-muted">Nothing outstanding.</p>
+    {% endif %}
+  </div>
+
+  <div class="section">
+    <h2>Debt priority</h2>
+    {% if debt_priority %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Debt</th><th class="num">Balance</th><th>APR</th></tr>
+          </thead>
+          <tbody>
+            {% for debt in debt_priority %}
+              {% set payoff = debt_payoffs.get(debt.id) if debt_payoffs else none %}
+              <tr>
+                <td>
+                  {% if loop.first %}<span class="badge badge--accent">Main target</span>{% endif %} {{ debt.name }}
+                  {% if loop.first and debt_priority_reason %}<br><span class="table-note">{{ debt_priority_reason }}</span>{% endif %}
+                  {% if payoff and payoff.payoff_impossible %}
+                    <br><span class="table-note text-bad">won't pay off at current minimum</span>
+                  {% elif payoff %}
+                    <br><span class="table-note">~{{ payoff.months }} mo / {{ payoff.total_interest_cents | money }} interest</span>
+                  {% endif %}
+                </td>
+                <td class="num">{{ debt.balance_cents | money }}</td>
+                <td>{% if debt.apr_bps %}{{ "%.2f"|format(debt.apr_bps / 100) }}%{% else %}—{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="mt-0 text-muted">No active debts.</p>
+    {% endif %}
+  </div>
+
+  <section class="card card--dashed mt-0">
+    <p class="hero-stat__label">Forecast position (not the default number)</p>
+    <p class="hero-stat__value hero-stat__value--small">{{ forecast_position_cents | money }}</p>
+  </section>
+  {% endif %}
+  </div>
+</div>

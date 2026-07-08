@@ -1,0 +1,15 @@
+<tr id="account-{{ account.id }}">
+  <td data-label="Name">{{ account.name }}</td>
+  <td data-label="Type">{{ account.type }}</td>
+  <td class="num" data-label="Balance">{{ account.balance_cents | money }}</td>
+  <td class="actions">
+    <a class="btn-link" href="/accounts/{{ account.id }}/edit">Edit</a>
+    <button
+      class="btn-link btn-link--danger"
+      hx-delete="/accounts/{{ account.id }}"
+      hx-target="#account-{{ account.id }}"
+      hx-swap="outerHTML"
+      hx-confirm="Delete {{ account.name }}?"
+      type="button">Delete</button>
+  </td>
+</tr>

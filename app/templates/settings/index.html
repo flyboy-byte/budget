@@ -1,0 +1,437 @@
+{% extends "base.html" %}
+{% block title %}Settings — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <h1>Settings</h1>
+
+  {% if saved %}<div class="alert alert--success">Saved.</div>{% endif %}
+  {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
+
+  <div class="card card--notifications">
+    <h2 class="mt-0">Notifications</h2>
+    <p class="text-muted mt-0">Everything about how and when this app alerts you, in one place.</p>
+
+    {% if notifications_saved %}<div class="alert alert--success">Saved.</div>{% endif %}
+    {% if notifications_error %}<div class="alert alert--error">{{ notifications_error }}</div>{% endif %}
+
+    {% if push_public_key %}
+    <div class="notif-block">
+      <p class="notif-block__label">Push (this browser/device)</p>
+      <p class="text-muted mt-0">Alerts sent straight to this device — bank-sync problems,
+        bills due, low safe-to-spend, large transactions. Enable on every device you want
+        to hear from.</p>
+      <button class="btn" type="button" id="push-enable-btn">Enable notifications on this device</button>
+      <p id="push-enable-status" class="text-muted"></p>
+      {% if push_subscriptions %}
+      <div class="table-wrap">
+        <table>
+          <tbody>
+            {% for sub in push_subscriptions %}
+            <tr>
+              <td data-label="Subscribed">since {{ sub.created_at }}</td>
+              <td class="actions">
+                <form method="post" action="/settings/push/{{ sub.id }}/unsubscribe">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button class="btn-link btn-link--danger" type="submit">Turn off</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+    <script>
+      (function () {
+        var btn = document.getElementById('push-enable-btn');
+        if (!btn) return;
+        var statusEl = document.getElementById('push-enable-status');
+        var publicKey = {{ push_public_key|tojson }};
+
+        function urlBase64ToUint8Array(base64) {
+          var padding = '='.repeat((4 - (base64.length % 4)) % 4);
+          var base64Safe = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+          var raw = atob(base64Safe);
+          var arr = new Uint8Array(raw.length);
+          for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+          return arr;
+        }
+
+        btn.addEventListener('click', async function () {
+          try {
+            if (typeof Notification === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+              statusEl.textContent = 'Push notifications are not supported in this browser.';
+              return;
+            }
+            if (Notification.permission === 'denied') {
+              statusEl.textContent = 'Notifications are blocked for this site — enable them in your browser/app site settings, then click this button again.';
+              return;
+            }
+
+            statusEl.textContent = 'Requesting permission...';
+            var permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+              statusEl.textContent = 'Permission not granted (' + permission + ').';
+              return;
+            }
+
+            statusEl.textContent = 'Registering service worker...';
+            var registration = await navigator.serviceWorker.ready;
+
+            statusEl.textContent = 'Subscribing...';
+            var subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(publicKey),
+            });
+
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            var resp = await fetch('/settings/push/subscribe', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': meta ? meta.content : '',
+              },
+              body: JSON.stringify(subscription.toJSON()),
+            });
+            if (!resp.ok) throw new Error('server rejected subscription (' + resp.status + ')');
+            window.location.reload();
+          } catch (err) {
+            console.error('Push subscribe failed:', err);
+            statusEl.textContent = 'Could not enable notifications: ' + (err && err.message ? err.message : err);
+          }
+        });
+      })();
+    </script>
+    {% else %}
+    <p class="text-muted mt-0">Push isn't configured on this server yet.</p>
+    {% endif %}
+
+    <form method="post" action="/settings/notifications">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+      <p class="notif-block__label">Email</p>
+      <div class="field">
+        <label for="digest_email">Daily digest email</label>
+        <input type="email" id="digest_email" name="digest_email" value="{{ values.digest_email }}">
+        <small>Optional. A once-a-day email with safe-to-spend and what's due soon. Leave blank to opt out.</small>
+      </div>
+
+      <p class="notif-block__label">Thresholds</p>
+      <div class="field-grid">
+        <div class="field">
+          <label for="large_transaction_threshold">Large-transaction alert ($)</label>
+          <input type="number" step="0.01" min="0" id="large_transaction_threshold"
+                 name="large_transaction_threshold" value="{{ values.large_transaction_threshold }}">
+          <small>Pushes on any new bank transaction at or above this amount. Default $100.</small>
+        </div>
+
+        <div class="field">
+          <label for="low_safe_to_spend_threshold">Low safe-to-spend alert ($)</label>
+          <input type="number" step="0.01" min="0" id="low_safe_to_spend_threshold"
+                 name="low_safe_to_spend_threshold" value="{{ values.low_safe_to_spend_threshold }}">
+          <small>Checked daily. Pushes once on the drop below, re-arms after recovering above it. Blank = off.</small>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn" type="submit">Save notifications</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 class="mt-0">Calculation settings</h2>
+    <p class="text-muted mt-0">How safe-to-spend, the reserved window, and the forecast get computed. Rarely needs changing.</p>
+    <form method="post" action="/settings">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+      <div class="field">
+        <label for="protected_savings_floor">Protected savings floor ($)</label>
+        <input type="number" step="0.01" min="0" id="protected_savings_floor"
+               name="protected_savings_floor" value="{{ values.protected_savings_floor }}">
+        <small>Subtracted from safe-to-spend on top of reserved cash — a buffer you never want counted as spendable.</small>
+      </div>
+
+      <div class="field">
+        <label for="reserved_window_mode">Reserved-cash window</label>
+        <select id="reserved_window_mode" name="reserved_window_mode">
+          {% for mode in reserved_window_modes %}
+            <option value="{{ mode }}" {% if values.reserved_window_mode == mode %}selected{% endif %}>{{ mode }}</option>
+          {% endfor %}
+        </select>
+        <small>
+          next_paycheck: through your earliest upcoming income event. end_of_month: through the last day of this month.
+          fixed_days: a fixed number of days from today.
+        </small>
+      </div>
+
+      <div class="field-grid">
+        <div class="field">
+          <label for="reserved_window_fixed_days">Fixed window length (days, used only in fixed_days mode)</label>
+          <input type="number" min="1" id="reserved_window_fixed_days" name="reserved_window_fixed_days"
+                 value="{{ values.reserved_window_fixed_days }}">
+        </div>
+
+        <div class="field">
+          <label for="forecast_window_days">Forecast window (days)</label>
+          <input type="number" min="1" id="forecast_window_days" name="forecast_window_days"
+                 value="{{ values.forecast_window_days }}">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="forecast_income_confidence">Forecast includes income at confidence</label>
+        <select id="forecast_income_confidence" name="forecast_income_confidence">
+          {% for c in confidence_options %}
+            <option value="{{ c }}" {% if values.forecast_income_confidence == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+        <small>confirmed: only confirmed income events. confirmed_likely: confirmed and likely.</small>
+      </div>
+
+      <div class="field">
+        <label for="timezone">Timezone (IANA name)</label>
+        <input type="text" id="timezone" name="timezone" list="tz-list" value="{{ values.timezone }}">
+        <datalist id="tz-list">
+          <option value="UTC">
+          <option value="America/New_York">
+          <option value="America/Chicago">
+          <option value="America/Denver">
+          <option value="America/Los_Angeles">
+        </datalist>
+        <small>Stored per-user; not yet applied to how dates are displayed elsewhere in the app.</small>
+      </div>
+
+      <div class="field">
+        <label for="bank_sync_cooldown_minutes">Bank sync cooldown (minutes)</label>
+        <input type="number" min="5" id="bank_sync_cooldown_minutes" name="bank_sync_cooldown_minutes"
+               value="{{ values.bank_sync_cooldown_minutes }}">
+        <small>Minimum time between "Sync now" calls per bank connection (also applies to the daily cron sync). Default 360 (6 hours); minimum 5.</small>
+      </div>
+
+      <div class="field">
+        <label>
+          <input type="checkbox" id="bank_sync_use_available_balance" name="bank_sync_use_available_balance"
+                 value="1" {% if values.bank_sync_use_available_balance == "1" %}checked{% endif %}>
+          Use bank's available balance instead of ledger balance
+        </label>
+        <small>This dropdown/toggle changes your "cash on hand" by calculating SimpleFIN's output a different way. Off (default): balances come from your bank's posted/ledger total, same as always. On: for accounts (not debts/loans), balances come from your bank's "available" total instead, which subtracts pending holds/charges your bank hasn't posted yet — so it can be a bit lower (or, for overdrafts, more negative) than the ledger total. Only takes effect on the next sync.</small>
+      </div>
+
+      <div class="field">
+        <label>
+          <input type="checkbox" id="bank_sync_auto_apply" name="bank_sync_auto_apply"
+                 value="1" {% if values.bank_sync_auto_apply == "1" %}checked{% endif %}>
+          Auto-apply a synced balance if it's a small change
+        </label>
+        <small>Off (default): every synced balance sits on the Bank Sync review screen until you manually apply it — safe, but easy to forget, and safe-to-spend won't move until you do. On: if a newly-synced balance is within the amount below of what's currently stored, it's applied automatically, no review needed. A bigger jump than that (a real balance swing, or a bad read from your bank) still waits for your manual review either way, so this can't silently blow past a real surprise.</small>
+      </div>
+
+      <div class="field">
+        <label for="bank_sync_auto_apply_max_change">Auto-apply threshold ($)</label>
+        <input type="number" step="0.01" min="0" id="bank_sync_auto_apply_max_change" name="bank_sync_auto_apply_max_change"
+               value="{{ values.bank_sync_auto_apply_max_change }}">
+        <small>How big a balance change still counts as "small" for the auto-apply toggle above. Default $250.</small>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn" type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 class="mt-0">Change password</h2>
+    {% if password_saved %}<div class="alert alert--success">Password changed. Other devices were signed out.</div>{% endif %}
+    {% if password_error %}<div class="alert alert--error">{{ password_error }}</div>{% endif %}
+    <form method="post" action="/settings/password">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="current_password">Current password</label>
+        <input type="password" id="current_password" name="current_password" required>
+      </div>
+      <div class="field">
+        <label for="new_password_self">New password</label>
+        <input type="password" id="new_password_self" name="new_password" minlength="8" required>
+      </div>
+      <div class="field">
+        <label for="confirm_password">Confirm new password</label>
+        <input type="password" id="confirm_password" name="confirm_password" minlength="8" required>
+      </div>
+      <div class="form-actions">
+        <button class="btn" type="submit">Change password</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 class="mt-0">Two-factor authentication</h2>
+    {% if totp_confirmed %}<div class="alert alert--success">Authenticator app enabled.</div>{% endif %}
+    {% if totp_disabled %}<div class="alert alert--success">Authenticator app disabled. Login mode reset to password.</div>{% endif %}
+    {% if totp_error %}<div class="alert alert--error">{{ totp_error }}</div>{% endif %}
+
+    {% if totp_enabled %}
+      <p>Authenticator app is <strong>enabled</strong>.</p>
+      <form method="post" action="/settings/totp/disable">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn-link btn-link--danger" type="submit">Disable</button>
+      </form>
+    {% elif totp_pending_qr %}
+      <p>Scan this with your authenticator app, then enter the 6-digit code it shows to finish setup.</p>
+      <img src="{{ totp_pending_qr }}" alt="QR code for authenticator app setup" width="200" height="200">
+      <p><small>Can't scan? Enter this key manually: <code>{{ totp_pending_secret }}</code></small></p>
+      <form method="post" action="/settings/totp/confirm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field">
+          <label for="totp_confirm_code">6-digit code</label>
+          <input type="text" id="totp_confirm_code" name="code" inputmode="numeric" maxlength="6" required autofocus>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit">Confirm</button>
+        </div>
+      </form>
+      <form method="post" action="/settings/totp/setup" class="mt-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn-link" type="submit">Start over with a new code</button>
+      </form>
+    {% else %}
+      <p class="text-muted mt-0">Not set up.</p>
+      <form method="post" action="/settings/totp/setup">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn" type="submit">Set up authenticator app</button>
+      </form>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2 class="mt-0">Login method</h2>
+    {% if auth_mode_saved %}<div class="alert alert--success">Saved.</div>{% endif %}
+    {% if auth_mode_error %}<div class="alert alert--error">{{ auth_mode_error }}</div>{% endif %}
+    <form method="post" action="/settings/auth-mode">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="auth_mode">Require at login</label>
+        <select id="auth_mode" name="auth_mode">
+          <option value="password" {% if auth_mode == "password" %}selected{% endif %}>Password only</option>
+          <option value="totp" {% if not totp_enabled %}disabled{% endif %} {% if auth_mode == "totp" %}selected{% endif %}>Authenticator app only</option>
+          <option value="both" {% if not totp_enabled %}disabled{% endif %} {% if auth_mode == "both" %}selected{% endif %}>Both (dual-factor)</option>
+        </select>
+        <small>
+          Your password is always kept on file regardless of this setting — "authenticator app only" just
+          means it isn't checked at login. Authenticator-app options need it set up and confirmed above first.
+        </small>
+      </div>
+      <div class="form-actions">
+        <button class="btn" type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+
+  {% if is_admin %}
+  <div class="card">
+    <h2 class="mt-0">Add a user</h2>
+    <p><small>Creates a fully separate, isolated account — their own accounts, debts, and safe-to-spend, never merged with yours.</small></p>
+    {% if new_user_created %}<div class="alert alert--success">Created user "{{ new_user_created }}".</div>{% endif %}
+    {% if new_user_error %}<div class="alert alert--error">{{ new_user_error }}</div>{% endif %}
+    <form method="post" action="/settings/users">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="new_username">Username</label>
+        <input type="text" id="new_username" name="new_username" required>
+      </div>
+      <div class="field">
+        <label for="new_password">Password</label>
+        <input type="password" id="new_password" name="new_password" minlength="8" required>
+      </div>
+      <div class="form-actions">
+        <button class="btn" type="submit">Create user</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 class="mt-0">Manage users</h2>
+    <p><small>Account administration only — active status, admin status, and password resets. No admin can see another user's financial data.</small></p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Username</th><th>Status</th><th>Admin</th><th>Last active</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for u in all_users %}
+          <tr>
+            <td data-label="Username">{{ u.username }}{% if u.id == current_user_id %} <span class="badge badge--safe">you</span>{% endif %}</td>
+            <td data-label="Status">{{ "Active" if u.is_active else "Deactivated" }}</td>
+            <td data-label="Admin">{{ "Yes" if u.is_admin else "No" }}</td>
+            <td data-label="Last active">{{ u.last_seen_at or "never" }}</td>
+            <td class="actions">
+              {% if u.id != current_user_id %}
+              <form method="post" action="/settings/users/{{ u.id }}/toggle-active" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="btn-link" type="submit">{{ "Deactivate" if u.is_active else "Reactivate" }}</button>
+              </form>
+              <form method="post" action="/settings/users/{{ u.id }}/toggle-admin" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="btn-link" type="submit">{{ "Remove admin" if u.is_admin else "Make admin" }}</button>
+              </form>
+              <details class="inline-form">
+                <summary class="btn-link">Reset password</summary>
+                <form method="post" action="/settings/users/{{ u.id }}/reset-password">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="password" name="new_password" minlength="8" required placeholder="New password">
+                  <button class="btn btn--small" type="submit">Set</button>
+                </form>
+              </details>
+              <form method="post" action="/settings/users/{{ u.id }}/reset-totp" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="btn-link btn-link--danger" type="submit">Reset 2FA</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="flex-between">
+      <h2 class="mt-0">Active sessions</h2>
+      {% if sessions|length > 1 %}
+      <form method="post" action="/settings/sessions/revoke-others">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn-link btn-link--danger" type="submit">Log out other devices</button>
+      </form>
+      {% endif %}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <tbody>
+          {% for session in sessions %}
+          <tr>
+            <td data-label="Device">
+              {{ session.description }}
+              {% if session.is_current %}<span class="badge badge--safe">this device</span>{% endif %}
+            </td>
+            <td data-label="Last active">last active {{ session.last_seen_at }}</td>
+            <td class="actions">
+              {% if not session.is_current %}
+              <form method="post" action="/settings/sessions/{{ session.id }}/revoke">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="btn-link btn-link--danger" type="submit">Log out</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+{% endblock %}

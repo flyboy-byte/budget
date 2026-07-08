@@ -1,0 +1,16 @@
+<tr id="snapshot-{{ snapshot.id }}">
+  <td data-label="Date">{{ snapshot.snapshot_date | human_date }}</td>
+  <td class="num" data-label="Safe to spend">{{ snapshot.safe_to_spend_cents | money }}</td>
+  <td class="num" data-label="Net position">{{ snapshot.net_position_cents | money }}</td>
+  <td class="num" data-label="Reserved">{{ snapshot.reserved_cash_cents | money }}</td>
+  <td class="num" data-label="Forecast">{{ snapshot.forecast_position_cents | money }}</td>
+  <td class="actions">
+    <button
+      class="btn-link btn-link--danger"
+      hx-delete="/snapshots/{{ snapshot.id }}"
+      hx-target="#snapshot-{{ snapshot.id }}"
+      hx-swap="outerHTML"
+      hx-confirm="Delete the {{ snapshot.snapshot_date }} snapshot?"
+      type="button">Delete</button>
+  </td>
+</tr>

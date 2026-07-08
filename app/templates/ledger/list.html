@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Activity Feed — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <div class="page-header">
+    <h1>Activity Feed</h1>
+    <a class="btn-link" href="/activity">Back to activity</a>
+  </div>
+  <p class="text-muted mt-0 mb-4">
+    Everything the app has recorded — bills paid, purchases, income, and ordinary
+    spending. This is the running history behind your numbers.
+  </p>
+
+  {% if entries %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Date</th><th>What</th><th class="num">Amount</th></tr>
+        </thead>
+        <tbody>
+          {% include "partials/_ledger_rows.html" %}
+        </tbody>
+      </table>
+    </div>
+    {% if total_count > page_size %}
+      <p class="text-muted mt-2">
+        <small>Showing the {{ page_size }} most recent of {{ total_count }} entries.</small>
+      </p>
+    {% endif %}
+  {% else %}
+    <div class="table-wrap empty-state">
+      Nothing recorded yet. Marking a bill paid, logging a payment, or tagging a bank
+      transaction as spending will show up here.
+    </div>
+  {% endif %}
+</main>
+{% endblock %}

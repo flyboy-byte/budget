@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Review Sync — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <h1>Review — {{ connection.label }}</h1>
+  <p class="text-muted mt-0 mb-4">
+    Nothing has been applied yet. Pick which balances to update — the rest stay
+    exactly as they are until you sync again.
+  </p>
+
+  {% if rows %}
+  <form method="post" action="/bank/{{ connection.id }}/apply">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>Account</th><th class="num">Current</th><th class="num">Synced</th></tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><input type="checkbox" name="staging_id" value="{{ row.staging.id }}" checked></td>
+              <td>{{ row.target.name }} <span class="text-muted">({{ row.target_kind }})</span></td>
+              <td class="num">{{ row.old_balance_cents | money }}</td>
+              <td class="num">
+                {{ row.staging.synced_balance_cents | money }}
+                {% if row.staging.balance_date %}
+                  <br><small class="text-muted">as of {{ row.staging.balance_date | unixdate }}</small>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="form-actions">
+      <button class="btn" type="submit">Apply selected</button>
+      <a class="btn-link" href="/bank">Cancel</a>
+    </div>
+  </form>
+  {% else %}
+  <div class="table-wrap empty-state">
+    Nothing new to review — either no mapped accounts changed, or none are linked yet.
+  </div>
+  <p><a class="btn-link" href="/bank">Back to bank sync</a></p>
+  {% endif %}
+</main>
+{% endblock %}

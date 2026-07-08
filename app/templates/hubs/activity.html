@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Activity — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <h1>Activity</h1>
+  <p class="text-muted mt-0 mb-4">What's coming in, going out, or already ordered.</p>
+
+  <div class="hub-grid">
+    <a class="hub-card" href="/committed-purchases">
+      <p class="hub-card__title">Purchases</p>
+      <p class="hub-card__stat">{{ purchase_count }} outstanding</p>
+      <p class="hub-card__desc">Ordered-but-not-billed and in-progress buys</p>
+    </a>
+    <a class="hub-card" href="/income-events">
+      <p class="hub-card__title">Income</p>
+      <p class="hub-card__stat">{{ income_count }} upcoming</p>
+      <p class="hub-card__desc">Paychecks and other expected money — forecast only, never counted as safe to spend yet</p>
+    </a>
+  </div>
+
+  <div class="page-header mt-4">
+    <h2 class="mt-0">Recent activity</h2>
+    {% if ledger_count %}<a class="btn-link" href="/ledger">See all {{ ledger_count }}</a>{% endif %}
+  </div>
+  {% if recent_entries %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Date</th><th>What</th><th class="num">Amount</th></tr>
+        </thead>
+        <tbody>
+          {% set entries = recent_entries %}
+          {% include "partials/_ledger_rows.html" %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="table-wrap empty-state">
+      Nothing recorded yet. Mark a bill paid, log a payment, or tag a bank
+      transaction as spending and it'll show up here.
+    </div>
+  {% endif %}
+</main>
+{% endblock %}

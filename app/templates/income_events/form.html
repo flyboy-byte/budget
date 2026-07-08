@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if event else "New" }} Income Event — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page page--narrow">
+  <h1>{{ "Edit" if event else "New" }} Income Event</h1>
+  <div class="card">
+    <form method="post" action="{{ action }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="source">Source</label>
+        <input type="text" id="source" name="source" value="{{ event.source if event else '' }}" required>
+      </div>
+      <div class="field">
+        <label for="amount">Expected amount ($)</label>
+        <input type="number" step="0.01" min="0" id="amount" name="amount"
+               value="{{ '%.2f'|format(event.expected_amount_cents / 100) if event else '0.00' }}" required>
+      </div>
+      <div class="field">
+        <label for="expected_date">Expected date</label>
+        <input type="date" id="expected_date" name="expected_date" value="{{ event.expected_date if event else '' }}" required>
+      </div>
+      <div class="field">
+        <label for="confidence">Confidence</label>
+        <select id="confidence" name="confidence">
+          {% for c in confidence_levels %}
+            <option value="{{ c }}" {% if event and event.confidence == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field checkbox-field">
+        <input type="checkbox" id="is_recurring" name="is_recurring" value="1" {% if event and event.is_recurring %}checked{% endif %}>
+        <label for="is_recurring">Recurring</label>
+      </div>
+      <div class="field">
+        <label for="recurrence_rule">Recurrence</label>
+        <select id="recurrence_rule" name="recurrence_rule">
+          <option value="">n/a</option>
+          {% for r in recurrence_rules %}
+            <option value="{{ r }}" {% if event and event.recurrence_rule == r %}selected{% endif %}>{{ r }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if event %}
+      <div class="field checkbox-field">
+        <input type="checkbox" id="is_received" name="is_received" value="1" {% if event.is_received %}checked{% endif %}>
+        <label for="is_received">Received</label>
+      </div>
+      {% if event.is_recurring and event.recurrence_rule %}
+      <p class="hint-note">
+        This is recurring — checking "Received" and saving rolls it forward to its next expected date automatically.
+      </p>
+      {% endif %}
+      <div class="field">
+        <label for="received_date">Received date</label>
+        <input type="date" id="received_date" name="received_date" value="{{ event.received_date if event.received_date else '' }}">
+      </div>
+      <div class="field">
+        <label for="received_amount">Received amount ($, leave blank if same as expected)</label>
+        <input type="number" step="0.01" min="0" id="received_amount" name="received_amount"
+               value="{{ '%.2f'|format(event.received_amount_cents / 100) if event.received_amount_cents is not none else '' }}">
+      </div>
+      {% endif %}
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes">{{ event.notes if event and event.notes else '' }}</textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn" type="submit">Save</button>
+        <a class="btn-link" href="/income-events">Cancel</a>
+      </div>
+    </form>
+  </div>
+</main>
+{% endblock %}

@@ -1,0 +1,28 @@
+<tr id="debt-{{ debt.id }}">
+  <td data-label="Name">{{ debt.name }}{% if incomplete_debt_ids and debt.id in incomplete_debt_ids %} <span class="badge badge--warning" title="Missing minimum payment or next due date — doesn't count toward reserved cash yet">Incomplete</span>{% endif %}</td>
+  <td data-label="Type">{{ debt.type }}</td>
+  <td class="num" data-label="Balance">{{ debt.balance_cents | money }}</td>
+  <td class="num" data-label="Min. payment">{{ debt.minimum_payment_cents | money }}</td>
+  <td data-label="Next due">{{ debt.next_due_date | human_date }}</td>
+  <td data-label="Interest">{{ debt.interest_status }}{% if debt.apr_bps %} {{ "%.2f"|format(debt.apr_bps / 100) }}%{% endif %}</td>
+  <td data-label="Payoff" class="text-muted">
+    {% set payoff = debt_payoffs.get(debt.id) if debt_payoffs else none %}
+    {%- if payoff is none -%}
+      —
+    {%- elif payoff.payoff_impossible -%}
+      <span class="text-bad">won't pay off at current minimum</span>
+    {%- else -%}
+      ~{{ payoff.months }} mo / {{ payoff.total_interest_cents | money }} interest
+    {%- endif -%}
+  </td>
+  <td class="actions">
+    <a class="btn-link" href="/debts/{{ debt.id }}/edit">Edit</a>
+    <button
+      class="btn-link btn-link--danger"
+      hx-delete="/debts/{{ debt.id }}"
+      hx-target="#debt-{{ debt.id }}"
+      hx-swap="outerHTML"
+      hx-confirm="Delete {{ debt.name }}?"
+      type="button">Delete</button>
+  </td>
+</tr>

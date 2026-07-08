@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Log in — Budget{% endblock %}
+{% block body %}
+<div class="login-page">
+  <div class="card login-card">
+    <h1>Log in</h1>
+    {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password">
+      </div>
+      <div class="field">
+        <label for="totp_code">Authenticator code (if enabled)</label>
+        <input type="text" id="totp_code" name="totp_code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+      </div>
+      <button class="btn btn--block" type="submit">Log in</button>
+    </form>
+
+    <p class="mt-4 text-center">
+      <button type="button" class="btn-link" id="request-access-toggle">Need an account? Email admin to add one</button>
+    </p>
+
+    <form id="request-access-form" class="mt-2" method="post" action="/login/request-access"
+          style="display:{{ 'block' if request_access_error or request_access_success else 'none' }}">
+      {% if request_access_error %}<div class="alert alert--error">{{ request_access_error }}</div>{% endif %}
+      {% if request_access_success %}<div class="alert alert--success">Request sent — the admin will follow up.</div>{% endif %}
+      <div class="field">
+        <label for="ra-name">Your name</label>
+        <input type="text" id="ra-name" name="name" required>
+      </div>
+      <div class="field">
+        <label for="ra-email">Your email</label>
+        <input type="email" id="ra-email" name="email" required>
+      </div>
+      <div class="field">
+        <label for="ra-message">Message (optional)</label>
+        <textarea id="ra-message" name="message" rows="3" placeholder="Why you'd like access"></textarea>
+      </div>
+      <button class="btn btn--block" type="submit">Send request</button>
+    </form>
+  </div>
+</div>
+<script>
+  (function () {
+    var toggle = document.getElementById("request-access-toggle");
+    var form = document.getElementById("request-access-form");
+
+    toggle.addEventListener("click", function () {
+      form.style.display = form.style.display === "none" ? "block" : "none";
+    });
+  })();
+</script>
+{% endblock %}

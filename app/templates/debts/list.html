@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Debts — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page page--wide">
+  <div class="page-header">
+    <h1>Debts</h1>
+    <a class="btn btn--small" href="/debts/new">+ Add debt</a>
+  </div>
+
+  {% if debts %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th><th>Type</th><th class="num">Balance</th>
+          <th class="num">Min. payment</th><th>Next due</th><th>Interest</th><th>Payoff</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="debts-body">
+        {% for debt in debts %}{% include "debts/_row.html" %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="table-wrap empty-state">No debts yet.</div>
+  {% endif %}
+</main>
+{% endblock %}

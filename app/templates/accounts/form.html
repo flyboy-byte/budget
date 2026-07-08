@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if account else "New" }} Account — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page page--narrow">
+  <h1>{{ "Edit" if account else "New" }} Account</h1>
+  <div class="card">
+    {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
+    <form method="post" action="{{ action }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{{ account.name if account else '' }}" required>
+      </div>
+      <div class="field">
+        <label for="type">Type</label>
+        <select id="type" name="type">
+          {% for t in account_types %}
+            <option value="{{ t }}" {% if account and account.type == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="balance">Balance ($)</label>
+        <input type="number" step="0.01" id="balance" name="balance"
+               value="{{ '%.2f'|format(account.balance_cents / 100) if account else '0.00' }}" required>
+      </div>
+      {% if account %}
+      <div class="field checkbox-field">
+        <input type="checkbox" id="is_active" name="is_active" value="1" {% if account.is_active %}checked{% endif %}>
+        <label for="is_active">Active</label>
+      </div>
+      {% endif %}
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes">{{ account.notes if account and account.notes else '' }}</textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn" type="submit">Save</button>
+        <a class="btn-link" href="/accounts">Cancel</a>
+      </div>
+    </form>
+  </div>
+</main>
+{% endblock %}

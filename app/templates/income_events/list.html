@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Income Events — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page page--wide">
+  <div class="page-header">
+    <h1>Income Events</h1>
+    <a class="btn btn--small" href="/income-events/new">+ Add income</a>
+  </div>
+  <p class="text-muted mt-0 mb-4">
+    These only ever affect the forecast view — never the primary safe-to-spend number.
+  </p>
+
+  {% if income_events %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th><th class="num">Amount</th><th>Expected</th><th>Confidence</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="income-events-body">
+        {% for event in income_events %}{% include "income_events/_row.html" %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="table-wrap empty-state">No upcoming income logged.</div>
+  {% endif %}
+</main>
+{% endblock %}

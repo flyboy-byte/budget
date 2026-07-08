@@ -1,0 +1,81 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+# setup
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+
+# first-time DB init (applies migrations + creates first user)
+.venv/bin/python -m scripts.init_db <username> <password>
+
+# run locally (BUDGET_INSECURE_COOKIES=1 needed for plain-HTTP local dev; cookies default to Secure)
+BUDGET_INSECURE_COOKIES=1 .venv/bin/uvicorn app.main:app --reload
+
+# tests (in-memory SQLite, never touches data/budget.db)
+.venv/bin/python -m pytest tests/ -q
+.venv/bin/python -m pytest tests/test_calc.py::test_safe_to_spend_can_go_negative -q   # single test
+
+# migrations (add a new numbered file, don't edit 0001_initial.sql after it's applied anywhere)
+.venv/bin/python -m migrations.runner
+```
+
+See `DEVELOPMENT.md` for the full command reference (cron scripts, password reset, etc).
+
+## Project state
+
+Feature-complete against the original build plan and **live in production** at
+`budget.flyboybyte.com`. `ARCHITECTURE.md` is the source of truth for design decisions
+(data model, calculation formulas, layering, deployment) — read it before touching
+`app/services/calc.py` or the schema. `IMPLEMENTATION_HISTORY.md` is the build log (what
+shipped when, and what broke along the way) — check it for context, but never treat it
+as current-state truth; `ARCHITECTURE.md` wins if the two ever disagree.
+`./deploy.sh` runs tests, pushes to GitHub, and redeploys to the VPS in one step; see
+`ARCHITECTURE.md`'s "Deployment" section for the VPS setup.
+
+## What this app is
+
+A private, single-user, self-hosted "cash-commitment and runway tracker" — not a generic budgeting app. It answers: "What is my real financial position right now, and what's actually safe to spend?", explicitly distinguishing cash-in-hand from cash-that's-already-spoken-for (upcoming bills, ordered-but-not-yet-billed purchases, debt minimums, committed obligations).
+
+**Decision test for new feature ideas** (from a `codex` product review, 2026-07-09 — see `IDEAS.md`): the app's V1 got the calculation model right but still asks the user to behave like a bookkeeper (typing exact current balances instead of "what happened"). Before promoting an `IDEAS.md` entry, check whether it reduces cross-app reconciliation, reduces exact-state typing in favor of event capture, shortens the path from "something happened" to "the app understands it," and helps the app explain reality (why did safe-to-spend move?) rather than just storing it — all without weakening the conservative main-number invariant above. An idea that's mostly "another place to enter data" is probably drift, not progress.
+
+The single most important design invariant, carried through every layer: **future income is never counted in the primary/default status number.** The dashboard's main "safe to spend" figure uses only cash already in accounts; future paychecks only ever appear in the separate, explicitly-labeled forecast view (`app/routers/forecast.py`, backed by `app/services/whatif.py`'s in-memory overlay). Any new feature or calculation must preserve this separation — don't let forecast/hypothetical numbers leak into the default dashboard state.
+
+The app behaves as single-user by default (no user-switching UI, no shared/household view) but is built multi-tenant-ready: every domain table carries `user_id`, so a second or third person can be added — either via CLI (`scripts/add_user.py`) or via the "Add a user" form on `/settings` (`POST /settings/users`) — never treat this as "add multi-user later," the schema and repository layer already assume it. Each created user gets a fully isolated account; there is no shared-data or linked-accounts concept, and none should be added unless explicitly requested. Instead, `app/templates/login.html` has a "request access" mini-form for people without an account: it POSTs directly to EmailJS's REST API (`https://api.emailjs.com/api/v1.0/email/send`) via plain `fetch()`, no vendored SDK, so it doesn't violate the no-CDN convention. The service ID/template ID/public key embedded there are meant to be client-side-visible per EmailJS's own model (rate-limited/domain-restricted from the EmailJS dashboard, not secrets) — this is not a credential leak.
+
+Since 2026-07-17 there's a real `users.is_admin` role (migration `0003_admin_and_debt_links.sql`), enforced by `app/deps.py::require_admin` (403 for a non-admin). `POST /settings/users` (add-user) now requires admin, tightened from the earlier "any logged-in user" behavior. Admin scope is deliberately narrow — account/auth administration only (`/settings/users/{id}/toggle-active`, `/toggle-admin`, `/reset-password`), never a read/write path into another user's financial data; every one of those routes touches only `users`/`sessions` columns. No UI can grant the very first admin (granting requires already being one) — that's `scripts/set_admin.py <username> on|off`, run once from the CLI. An admin also can't deactivate or demote themselves through the UI (self-lockout guard) — that's CLI-only too. Every user (admin or not) can change their own password via `POST /settings/password` (`app/security.py::verify_password`/`delete_other_sessions` — revokes other sessions, keeps the current one).
+
+## Architecture
+
+Stack: FastAPI + SQLite + Jinja2 + HTMX. No ORM — raw `sqlite3` with hand-written parametrized SQL (money-precision correctness over ORM convenience for this table count). No SPA build step; HTMX is vendored locally at `app/static/vendor/htmx.min.js`, not loaded from a CDN. No typed model/dataclass layer either — `sqlite3.Row` (dict-like, works directly in Jinja templates) was sufficient throughout and a `models/` layer was deliberately dropped rather than left half-used.
+
+Layering (see `ARCHITECTURE.md`'s "Project Structure" for the annotated full tree):
+- `app/repositories/` — one module per table, raw SQL only, no business logic. Every function takes `user_id` as an explicit argument and filters by it — never a global "current user." Create/update functions return success/failure by row-count (`cur.rowcount > 0`), which is how cross-user ownership checks happen (an update/delete targeting another user's row silently matches zero rows instead of needing a separate ownership query).
+- `app/services/calc.py` — the calculation engine (aggregates, reserved-cash window logic, safe-to-spend, forecast position, debt priority ranking, snapshot value computation). This is the module where the financial logic must match `ARCHITECTURE.md`'s formulas exactly — treat discrepancies as bugs in the code, not the spec.
+- `app/services/whatif.py` — hypothetical overlay for what-if scenarios. Never writes to the real database: builds a throwaway in-memory SQLite DB seeded with a copy of the user's real rows plus the hypothetical entries, then runs it through the *same* `calc.py` functions used everywhere else. This is deliberate — it guarantees what-if numbers can never drift from the real calculation rules, because there's only one implementation of each formula.
+- `app/services/export.py` — per-table CSV export and full JSON backup/restore, scoped to one user's data at a time. Restore never trusts backed-up row IDs (they're a single global `AUTOINCREMENT` sequence shared across all users, not per-user) — it assigns fresh IDs and remaps `transactions`' FK references via an ID map built during the same restore. CSV cells are checked for leading `=`/`+`/`-`/`@` (spreadsheet formula injection) and prefixed with `'` if found.
+- `app/services/recurrence.py` — pure-stdlib date math (weekly/biweekly/monthly/yearly, with day-of-month/leap-day clamping) for rolling a recurring obligation/income event forward. `app/services/bills.py` builds on it: `mark_obligation_paid`/`mark_income_received` apply that same roll-forward rule to whatever's *currently stored* (no form fields to also edit) — used by the `/today` quick-actions screen. The full edit-form routes (`app/routers/obligations.py`/`income_events.py`) have their own inline version of the same branching logic since they also handle user-submitted field changes in the same request; don't be surprised these aren't unified into one function, it's deliberate given the different inputs.
+- `app/sparkline.py` — hand-rolled inline SVG trend line for the dashboard (no JS charting library, no CDN — the "no charting libraries" non-goal is about avoiding a bundled dependency, not never showing a trend). `app/routers/dashboard.py` auto-captures a snapshot on first view each day to feed it.
+- `app/routers/` — thin HTTP layer over services/repositories. Every mutating route (`POST`/`PUT`/`DELETE`) carries `Depends(verify_csrf_token)` except the one deliberate exception: `POST /login` (no session exists yet to check a CSRF token against — protected instead by an in-process rate limiter, `app/ratelimit.py`). `app/routers/hubs.py` adds three landing pages (`/money`, `/activity`, `/more`) that group the per-entity screens into 4 top-level nav destinations instead of 11 — every entity's own route/CRUD is unchanged underneath. `app/routers/quick_actions.py` (mounted at `/today`) is the dashboard's quick-action forms — the one place in the app using htmx out-of-band swaps, not just delete-without-reload.
+- `app/templates/` — one directory per entity (`list.html`, `form.html`, `_row.html`), all extending `base.html` and including `partials/nav.html`. Pattern: classic form POST+redirect for create/edit, HTMX `DELETE` for row removal without a full page reload. CSRF token is embedded in a `<meta name="csrf-token">` tag and auto-attached to htmx requests via an `htmx:configRequest` listener in `base.html`. `app/templates/hubs/` breaks that per-entity pattern deliberately — each is a single landing page, not a list/form/_row trio. `app/templates/partials/_dashboard_summary.html` is shared by the full dashboard render and every `/today/*` quick-action response — it's the `hx-swap-oob="true"` target (`id="dashboard-summary"`) that refreshes safe-to-spend/sparkline/debt-priority in place after a quick action, without the acting form's own `hx-target` (e.g. a single bill row) being touched. If you add a new quick-action route, render this partial via `app/routers/quick_actions.py`'s `_summary_fragment()` helper and concatenate it after your own confirmation HTML — don't hand-roll the summary markup again.
+- `app/security.py` also owns session management beyond login/logout: `list_sessions`/`delete_session_for_user`/`delete_other_sessions` back the "active sessions" section on `/settings`, all ownership-scoped so a session id can't be guessed to revoke someone else's. `app/useragent.py` is a small dependency-free UA→"Chrome on Mac"-style label, not a real parser.
+- `app/crypto.py` is this app's stored-decryptable-secret helper — `Fernet` encrypt/decrypt, used for the SimpleFIN bank-sync Access URL (`BANK_SYNC_ENCRYPTION_KEY`) and TOTP secrets (`TOTP_ENCRYPTION_KEY`, a distinct key so a leak of one doesn't expose the other). Keys are read lazily inside `encrypt()`/`decrypt()`, not at import time or added to `app/config.py`'s module-level constants, so a missing key only breaks the feature that needs it, not app startup for everyone else. `app/services/bank_sync.py` is the SimpleFIN Bridge HTTP client (`claim_setup_token`/`fetch_accounts`) — pure functions, no DB access, tested fully offline via `httpx.MockTransport` (built into the existing `httpx` dependency, no test-only package added). One non-obvious finding baked into `fetch_accounts`: httpx does **not** auto-send Basic Auth from a URL's embedded userinfo (`https://key:secret@host/path`) — it must be pulled out explicitly and passed as `auth=httpx.BasicAuth(...)`, verified experimentally before writing the code. Full bank-sync build history (all 6 phases, several hardening passes, a real debt-sign-convention bug) is in `IMPLEMENTATION_HISTORY.md`.
+
+`app/services/payments.py` (built, despite an earlier version of this doc saying otherwise) is the orchestration layer for recording a payment against a committed purchase from the `/today` quick-payment form: it calls `committed_purchases_repo.record_payment` (the repo stays dumb — direct edits via the full edit form still update `amount_paid_cents`/`status` without a ledger entry) and additionally debits the default account and writes a `transactions` row. `app/services/bills.py`'s `mark_obligation_paid`/`mark_income_received` do the same for obligations/income. Since 2026-07-21, `app/services/bank_transactions.py` also writes to the ledger — confirming a bank-fed transaction match against an obligation/committed purchase — but deliberately does **not** debit any account balance (that same cash movement is already reflected the next time the account's balance syncs; double-debiting would double-count it). No screen yet actually displays this ledger back to the user — only writes exist so far, not a read/browse view.
+
+Two things in `calc.py` worth re-reading `ARCHITECTURE.md`'s "Calculation Rules" for before touching:
+- **Reserved cash** includes debt *minimum* payments due within the reserved-cash window, not full debt balances — extra/optional principal paydown is a separate, non-reserved concept.
+- **Committed purchases** with status `ordered`/`arrived`/`partially_paid` are reserved unconditionally, regardless of the reserved-cash window; only `planned` purchases are gated by `payment_deadline` falling inside the window.
+
+## Working in this repo
+
+- `ARCHITECTURE.md` describes current-state truth only, never dated/historical narrative — check it before assuming something is or isn't built. `IMPLEMENTATION_HISTORY.md` is the phase-by-phase build log (what shipped when, real bugs found and fixed); git log/commit messages are the lowest-level detail beneath that.
+- When schema changes are needed, add a new numbered migration file in `migrations/`; don't edit `0001_initial.sql` after it's been applied anywhere.
+- No *public/unauthenticated* registration route, ever — the only way to create a user is CLI (`scripts/init_db.py`, `scripts/add_user.py`) or the admin-gated `POST /settings/users` form, which requires an existing logged-in session and CSRF like every other mutating route.
+- Every mutating route needs `verify_csrf_token`; every route reading/writing domain data needs `get_current_user_id` and must filter by that `user_id`, never trust a `user_id` from the request body/query string.
+- Before believing a feature is fully wired up, verify against a real running server (`uvicorn`), not just `TestClient` — a real threading bug (`app/db.py`'s `check_same_thread`) and a real cookie-sliding bug only ever surfaced that way, despite passing tests both times.
+- Prefer fixing a bug at its root cause over adding an exception handler that papers over it — e.g. the restore-ID-collision bug was fixed by never reusing backed-up IDs, not by catching the resulting `IntegrityError` (though a global `IntegrityError` → 400 handler in `app/main.py` still exists as a safety net for CHECK-constraint violations that don't have dedicated validation).
+- `IDEAS.md` is the intake queue for feature ideas — from the user directly, pasted from another AI chat, or dumped there by a `codex` run against `codex.md`. At the start of any session touching new feature work, read `IDEAS.md`'s "Raw / unsorted" section, triage it into "Under consideration"/"Rejected / parked," and move an entry to "Promoted" once it actually ships. `ARCHITECTURE.md` stays the source of truth for what's built; `IDEAS.md` never is. `snapshot.md` (combined-docs dump for pasting elsewhere) is generated, not hand-edited — run `.venv/bin/python -m scripts.make_snapshot` to refresh it, don't edit it directly.
+- `PLAN.md` (added 2026-08-30) is the ordered, scoped work queue — the difference from `IDEAS.md` is that everything in it is already triaged and ready to execute, not raw backlog. Check it at the start of any session doing planned work; update statuses in place (strike through completed items with a one-line note on what shipped, don't delete the line) rather than re-deriving scope from scratch. Its "Decisions already made (do not re-ask)" section is literal — don't re-litigate those.

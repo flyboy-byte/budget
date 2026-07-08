@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Bank Sync — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <div class="page-header">
+    <h1>Bank Sync</h1>
+    <div>
+      <a class="btn-link" href="/bank/transactions">Match transactions{% if unmatched_transaction_count %} ({{ unmatched_transaction_count }}){% endif %}</a>
+      <a class="btn btn--small" href="/bank/connect">+ Connect a bank</a>
+    </div>
+  </div>
+
+  {% if connections %}
+    {% for entry in connections %}
+      {% set connection = entry.row %}
+      <div class="card">
+        <div class="flex-between">
+          <div>
+            <p class="hero-stat__label mt-0">{{ connection.label }}</p>
+            <p class="hero-stat__note mt-0">
+              {% if connection.status == 'error' %}
+                <span class="badge badge--risky">Needs reconnect</span> {{ connection.last_error }}
+              {% elif connection.last_synced_at %}
+                Last synced {{ connection.last_synced_at }}
+                {% if entry.stale %}
+                  <span class="badge badge--warning">Hasn't synced in a while</span>
+                {% endif %}
+                {% if connection.last_error %}
+                  <br><span class="badge badge--warning">Partial sync</span> {{ connection.last_error }}
+                {% endif %}
+              {% else %}
+                Never synced
+              {% endif %}
+            </p>
+          </div>
+          <div>
+            <form method="post" action="/bank/{{ connection.id }}/sync" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn--small" type="submit">Sync now</button>
+            </form>
+            <form method="post" action="/bank/{{ connection.id }}/disconnect" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn-link" type="submit">Disconnect</button>
+            </form>
+          </div>
+        </div>
+
+        {% if entry.links %}
+        <div class="table-wrap mt-4">
+          <table>
+            <thead>
+              <tr><th>Bank account</th><th>Mapped to</th><th></th></tr>
+            </thead>
+            <tbody>
+              {% for link_entry in entry.links %}
+                {% set link = link_entry.row %}
+                <tr>
+                  <td>{{ link.sfin_account_name }}</td>
+                  <td>
+                    <form method="post" action="/bank/{{ connection.id }}/links/{{ link.id }}" class="inline-form bank-map-form">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      <select name="target" class="bank-map-select" onchange="handleBankMapChange(this)">
+                        <option value="">— not linked —</option>
+                        <optgroup label="Accounts">
+                          {% for account in accounts %}
+                            <option value="account:{{ account.id }}" {% if link.account_id == account.id %}selected{% endif %}>{{ account.name }}</option>
+                          {% endfor %}
+                          <option value="new_account">+ Create new account</option>
+                        </optgroup>
+                        <optgroup label="Debts">
+                          {% for debt in debts %}
+                            <option value="debt:{{ debt.id }}" {% if link.debt_id == debt.id %}selected{% endif %}>{{ debt.name }}</option>
+                          {% endfor %}
+                          <option value="new_debt">+ Create new debt</option>
+                        </optgroup>
+                      </select>
+                      <span class="bank-map-new" style="display:none">
+                        <input type="text" name="new_name" placeholder="Name">
+                        <button class="btn btn--small" type="submit">Create &amp; link</button>
+                      </span>
+                    </form>
+                  </td>
+                  <td></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted">No accounts seen yet — sync to discover accounts on this connection.</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="table-wrap empty-state">No bank connections yet.</div>
+  {% endif %}
+</main>
+<script>
+  function handleBankMapChange(select) {
+    var newFields = select.closest("form").querySelector(".bank-map-new");
+    if (select.value === "new_account" || select.value === "new_debt") {
+      newFields.style.display = "inline";
+      newFields.querySelector("input[name=new_name]").focus();
+    } else {
+      newFields.style.display = "none";
+      select.form.submit();
+    }
+  }
+</script>
+{% endblock %}

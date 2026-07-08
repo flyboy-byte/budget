@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Export / Backup — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <h1>Export / Backup</h1>
+
+  <section class="card">
+    <h2 class="mt-0">CSV (per table)</h2>
+    <ul class="csv-list">
+      {% for table in csv_tables %}
+        <li><a href="/export/csv/{{ table }}">{{ table }}.csv</a></li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2 class="mt-0">CSV (combined)</h2>
+    <p class="text-muted">
+      Every table in one file, with a <code>table</code> column identifying each row —
+      handy for pasting into a chat in one shot instead of attaching 7 separate files.
+    </p>
+    <a class="btn btn--secondary" href="/export/csv-combined">Download combined CSV</a>
+  </section>
+
+  <section class="card">
+    <h2 class="mt-0">Full backup</h2>
+    <p class="text-muted">A single JSON file with every table, for restore or safekeeping.</p>
+    <a class="btn btn--secondary" href="/export/json">Download full JSON backup</a>
+  </section>
+
+  <section class="card card--danger">
+    <h2 class="mt-0 text-bad">Restore from backup</h2>
+    <p class="text-muted">
+      This replaces <strong>all</strong> of your current data with what's in the file.
+      This cannot be undone. Only your own data is touched — nothing else on this
+      server is affected.
+    </p>
+    <form method="post" action="/export/restore" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <input type="file" name="backup_file" accept="application/json" required>
+      </div>
+      <div class="field checkbox-field">
+        <input type="checkbox" id="confirm" name="confirm" value="1" required>
+        <label for="confirm">I understand this replaces all of my current data.</label>
+      </div>
+      <button class="btn btn--danger-solid" type="submit">Restore</button>
+    </form>
+    {% if restore_error %}<div class="alert alert--error">{{ restore_error }}</div>{% endif %}
+    {% if restore_success %}<div class="alert alert--success">Restore complete.</div>{% endif %}
+  </section>
+</main>
+{% endblock %}

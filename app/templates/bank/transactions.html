@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Match Transactions — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <div class="page-header">
+    <h1>Match Transactions</h1>
+    <a class="btn-link" href="/bank">Back to bank sync</a>
+  </div>
+  <p class="text-muted mt-0 mb-4">
+    Transactions from your synced accounts. If one paid off a bill or a purchase,
+    match it. If it was just ordinary spending, log it as that — it lands in your
+    activity feed either way. Dismiss only if you want the app to forget it entirely.
+  </p>
+
+  <datalist id="spending-category-list">
+    {% for category in spending_categories %}<option value="{{ category }}">{% endfor %}
+  </datalist>
+
+  {% if staged_transactions %}
+    <form id="bulk-dismiss-form" method="post" action="/bank/transactions/dismiss-selected" class="form-actions mb-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn-link" type="submit">Dismiss selected</button>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>Date</th><th>Description</th><th class="num">Amount</th><th>Match to</th><th>Or just spending</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for txn in staged_transactions %}
+            <tr>
+              <td><input type="checkbox" name="staging_id" value="{{ txn.id }}" form="bulk-dismiss-form"></td>
+              <td>{{ txn.posted_date | human_date }}{% if txn.pending %} <span class="badge">pending</span>{% endif %}</td>
+              <td>{{ txn.description }}</td>
+              <td class="num">{{ txn.amount_cents | money }}</td>
+              <td>
+                <form method="post" action="/bank/transactions/{{ txn.id }}/match" class="inline-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <select name="target" required>
+                    <option value="">— pick a match —</option>
+                    <optgroup label="Obligations">
+                      {% for obligation in obligations %}
+                        <option value="obligation:{{ obligation.id }}">{{ obligation.name }} ({{ obligation.amount_cents | money }})</option>
+                      {% endfor %}
+                    </optgroup>
+                    <optgroup label="Committed Purchases">
+                      {% for purchase in purchases %}
+                        <option value="purchase:{{ purchase.id }}">{{ purchase.name }} ({{ purchase.remaining_cents | money }} left)</option>
+                      {% endfor %}
+                    </optgroup>
+                  </select>
+                  <button class="btn btn--small" type="submit">Match</button>
+                </form>
+              </td>
+              <td>
+                <form method="post" action="/bank/transactions/{{ txn.id }}/spending" class="inline-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="text" name="category" list="spending-category-list"
+                         placeholder="category (optional)" size="14">
+                  <button class="btn btn--small" type="submit">Just spending</button>
+                </form>
+              </td>
+              <td>
+                <form method="post" action="/bank/transactions/{{ txn.id }}/dismiss" class="inline-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button class="btn-link" type="submit">Dismiss</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="table-wrap empty-state">
+      Nothing to match — sync an account-linked connection to pull in recent transactions.
+    </div>
+  {% endif %}
+</main>
+{% endblock %}

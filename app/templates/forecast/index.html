@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Forecast / What-if — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <h1>Forecast / What-if</h1>
+  <p class="text-muted mt-0 mb-4">
+    Nothing here is ever saved. Add a hypothetical item below to see how it would move
+    your numbers, then use "Add this for real" if you want to keep it.
+  </p>
+
+  <section class="card card--dashed">
+    <p class="hero-stat__label">Forecast position (real, {{ forecast_window_days }}-day window)</p>
+    <p class="hero-stat__value hero-stat__value--small">{{ result.real.forecast_position_cents | money }}</p>
+  </section>
+
+  {% if submitted %}
+  <section class="card">
+    <h2 class="mt-0">With this hypothetical item</h2>
+    <table>
+      <tbody>
+        <tr>
+          <td>Safe to spend</td>
+          <td class="num">
+            {{ result.hypothetical.safe_to_spend_cents | money }}
+            <span class="{{ 'text-bad' if result.delta.safe_to_spend_cents < 0 else 'text-good' }}">({{ result.delta.safe_to_spend_cents | money }})</span>
+          </td>
+        </tr>
+        <tr>
+          <td>Reserved cash</td>
+          <td class="num">
+            {{ result.hypothetical.reserved_cash_cents | money }}
+            <span class="text-muted">({{ result.delta.reserved_cash_cents | money }})</span>
+          </td>
+        </tr>
+        <tr>
+          <td>Forecast position</td>
+          <td class="num">
+            {{ result.hypothetical.forecast_position_cents | money }}
+            <span class="{{ 'text-bad' if result.delta.forecast_position_cents < 0 else 'text-good' }}">({{ result.delta.forecast_position_cents | money }})</span>
+          </td>
+        </tr>
+        <tr>
+          <td>Total debt</td>
+          <td class="num">
+            {{ result.hypothetical.total_debt_cents | money }}
+            <span class="text-muted">({{ result.delta.total_debt_cents | money }})</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="confirm-link">
+      <a href="{{ confirm_url }}">Add this for real &rarr;</a>
+    </p>
+  </section>
+  {% endif %}
+
+  <div class="card">
+    <form method="post" action="/forecast">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="entity_type">What kind of hypothetical?</label>
+        <select id="entity_type" name="entity_type" onchange="this.form.submit()">
+          <option value="obligation" {% if entity_type == 'obligation' %}selected{% endif %}>New bill / obligation</option>
+          <option value="purchase" {% if entity_type == 'purchase' %}selected{% endif %}>Committed purchase</option>
+          <option value="debt" {% if entity_type == 'debt' %}selected{% endif %}>New debt</option>
+          <option value="income" {% if entity_type == 'income' %}selected{% endif %}>Extra income</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="description">Description</label>
+        <input type="text" id="description" name="description" value="{{ description or '' }}">
+      </div>
+      <div class="field">
+        <label for="amount">Amount ($)</label>
+        <input type="number" step="0.01" min="0" id="amount" name="amount" value="{{ amount or '0.00' }}" required>
+      </div>
+      <div class="field">
+        <label for="date">Date{% if entity_type == 'purchase' %} (payment deadline, if status is "planned"){% endif %}</label>
+        <input type="date" id="date" name="date" value="{{ date_value or '' }}">
+      </div>
+      {% if entity_type == 'purchase' %}
+      <div class="field">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+          {% for s in purchase_statuses %}<option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      {% if entity_type == 'debt' %}
+      <div class="field">
+        <label for="minimum_payment">Minimum payment ($)</label>
+        <input type="number" step="0.01" min="0" id="minimum_payment" name="minimum_payment" value="{{ minimum_payment or '0.00' }}">
+      </div>
+      <div class="field">
+        <label for="interest_status">Interest status</label>
+        <select id="interest_status" name="interest_status">
+          {% for s in interest_statuses %}<option value="{{ s }}" {% if interest_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      {% if entity_type == 'income' %}
+      <div class="field">
+        <label for="confidence">Confidence</label>
+        <select id="confidence" name="confidence">
+          {% for c in confidence_levels %}<option value="{{ c }}" {% if confidence == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <button class="btn" type="submit">See impact</button>
+    </form>
+  </div>
+</main>
+{% endblock %}

@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page page--dashboard">
+  <div class="page-header">
+    <h1>Today</h1>
+    <form method="post" action="/logout">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn--secondary btn--small" type="submit">Log out</button>
+    </form>
+  </div>
+
+  <div class="dashboard-grid">
+  {% include "partials/_dashboard_summary.html" %}
+
+  {% if not is_first_run %}
+  <div class="section dashboard-quick">
+    <h2>Update today</h2>
+    <p class="mt-0 text-muted mb-4">Tell it what happened — safe-to-spend updates right here, no page reload.</p>
+
+    <div class="hub-grid">
+      <div class="card mt-0">
+        <p class="form-title">Can I afford this?</p>
+        <form hx-post="/today/afford" hx-target="#quick-afford-result" hx-swap="innerHTML">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="field">
+            <label for="qa-amount">Amount ($)</label>
+            <input type="number" step="0.01" min="0" id="qa-amount" name="amount" required>
+          </div>
+          <button class="btn btn--small" type="submit">Check</button>
+          <div id="quick-afford-result"></div>
+        </form>
+      </div>
+
+      <div class="card mt-0">
+        <p class="form-title">Update a balance</p>
+        <form hx-post="/today/balance" hx-target="#quick-balance-result" hx-swap="innerHTML">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="field">
+            <label for="qb-account">Account</label>
+            <select id="qb-account" name="account_id" required>
+              {% for account in quick_accounts %}
+                <option value="{{ account.id }}" data-balance-cents="{{ account.balance_cents }}">{{ account.name }} ({{ account.balance_cents | money }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="qb-balance">New balance ($)</label>
+            <input type="number" step="0.01" min="0" id="qb-balance" name="balance" required>
+          </div>
+          <button class="btn btn--small" type="submit">Update</button>
+          <div id="quick-balance-result"></div>
+        </form>
+      </div>
+
+      <div class="card mt-0">
+        <p class="form-title">Record a payment</p>
+        <form hx-post="/today/payment" hx-target="#quick-payment-result" hx-swap="innerHTML">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          {% if quick_purchases %}
+          <div class="field">
+            <label for="qp-purchase">Toward</label>
+            <select id="qp-purchase" name="purchase_id" required>
+              {% for purchase in quick_purchases %}
+                <option value="{{ purchase.id }}" data-remaining-cents="{{ purchase.remaining_cents }}">{{ purchase.name }} ({{ purchase.remaining_cents | money }} left)</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="qp-amount">Amount ($)</label>
+            <input type="number" step="0.01" min="0" id="qp-amount" name="amount" required>
+          </div>
+          <button class="btn btn--small" type="submit">Record payment</button>
+          {% else %}
+          <p class="text-muted">Nothing outstanding to pay toward.</p>
+          {% endif %}
+          <div id="quick-payment-result"></div>
+        </form>
+      </div>
+
+      <div class="card mt-0">
+        <p class="form-title">Add a purchase</p>
+        <form hx-post="/today/purchase" hx-target="#quick-purchase-result" hx-swap="innerHTML">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="field">
+            <label for="qpu-name">What</label>
+            <input type="text" id="qpu-name" name="name" required>
+          </div>
+          <div class="field">
+            <label for="qpu-category">Category</label>
+            <input type="text" id="qpu-category" name="category" list="qpu-category-options" required>
+            <datalist id="qpu-category-options">
+              {% for c in quick_purchase_categories %}<option value="{{ c }}">{% endfor %}
+            </datalist>
+          </div>
+          <div class="field">
+            <label for="qpu-amount">Amount ($)</label>
+            <input type="number" step="0.01" min="0" id="qpu-amount" name="amount" required>
+          </div>
+          <button class="btn btn--small" type="submit">Add</button>
+          <div id="quick-purchase-result"></div>
+        </form>
+      </div>
+
+      <div class="card mt-0">
+        <p class="form-title">Mark a bill paid</p>
+        {% if quick_bills %}
+        <div id="quick-bills-list">
+          {% for bill in quick_bills %}
+          <div class="flex-between mb-2" id="quick-bill-{{ bill.id }}">
+            <span>{{ bill.name }} — {{ bill.amount_cents | money }} due {{ bill.due_date | human_date }}</span>
+            <button
+              class="btn-link"
+              hx-post="/today/bill-paid/{{ bill.id }}"
+              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+              hx-target="#quick-bill-{{ bill.id }}"
+              hx-swap="outerHTML">Paid</button>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted">Nothing unpaid right now.</p>
+        {% endif %}
+      </div>
+
+      <div class="card mt-0">
+        <p class="form-title">Mark income received</p>
+        {% if quick_income_events %}
+        <div id="quick-income-list">
+          {% for event in quick_income_events %}
+          <div class="flex-between mb-2" id="quick-income-{{ event.id }}">
+            <span>{{ event.source }} — {{ event.expected_amount_cents | money }} expected {{ event.expected_date | human_date }}</span>
+            <button
+              class="btn-link"
+              hx-post="/today/income-received/{{ event.id }}"
+              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+              hx-target="#quick-income-{{ event.id }}"
+              hx-swap="outerHTML">Received</button>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted">Nothing expected right now.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  </div>
+</main>
+<script>
+  function prefillFromSelectedOption(selectId, inputId, dataAttr) {
+    var select = document.getElementById(selectId);
+    var input = document.getElementById(inputId);
+    if (!select || !input) return;
+    function apply() {
+      var option = select.options[select.selectedIndex];
+      var cents = option ? option.getAttribute(dataAttr) : null;
+      if (cents !== null) {
+        input.value = (parseInt(cents, 10) / 100).toFixed(2);
+      }
+    }
+    select.addEventListener("change", apply);
+    apply();
+  }
+  prefillFromSelectedOption("qb-account", "qb-balance", "data-balance-cents");
+  prefillFromSelectedOption("qp-purchase", "qp-amount", "data-remaining-cents");
+</script>
+{% endblock %}

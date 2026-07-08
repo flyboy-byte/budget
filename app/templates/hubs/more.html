@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}More — Budget{% endblock %}
+{% block body %}
+{% include "partials/nav.html" %}
+<main class="page">
+  <h1>More</h1>
+  <p class="text-muted mt-0 mb-4">Planning tools, history, and account settings.</p>
+
+  <div class="hub-grid">
+    <a class="hub-card" href="/forecast">
+      <p class="hub-card__title">Forecast</p>
+      <p class="hub-card__desc">What-if scenarios — nothing here is ever saved until you confirm it</p>
+    </a>
+    <a class="hub-card" href="/snapshots">
+      <p class="hub-card__title">Snapshots</p>
+      <p class="hub-card__stat">{{ snapshot_count }} captured</p>
+      <p class="hub-card__desc">Your trend over time, one point per day</p>
+    </a>
+    <a class="hub-card" href="/export">
+      <p class="hub-card__title">Export &amp; backup</p>
+      <p class="hub-card__desc">CSV per table, or a full JSON backup with restore</p>
+    </a>
+    <a class="hub-card" href="/settings">
+      <p class="hub-card__title">Settings</p>
+      <p class="hub-card__desc">Reserved-cash window, savings floor, timezone, active sessions</p>
+    </a>
+  </div>
+</main>
+{% endblock %}
