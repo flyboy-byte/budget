@@ -82,8 +82,10 @@ live (`bank_sync_auto_apply = 1` in prod). shelby's digest 403 fixed same day vi
 `BUDGET_DIGEST_FROM_EMAIL=budget@reports.flyboybyte.com`. Full detail in
 `IMPLEMENTATION_HISTORY.md` once §4 below catches that file up.
 
-**Open follow-up, not yet checked**: confirm `safe_to_spend` is actually moving
-day-to-day in the digest now that auto-apply is live — spot-check next session.
+~~**Open follow-up**~~ — DONE (2026-09-06). Confirmed live: `safe_to_spend_cents` in
+`snapshots` genuinely moves day-to-day now (`70085` → `128412` → `65803` → `68102` →
+`96552` across the two weeks up to 2026-09-06), not frozen like the 2026-08-26
+diagnosis found before auto-apply shipped.
 
 ## 1. UI/design overhaul — `design/` audit (2026-09-02)
 
@@ -629,12 +631,15 @@ the pre-audit one.
    a direct, separate ask — that's destructive and hard to undo.
 4. **Skim `IMPLEMENTATION_HISTORY.md`** once §4 is written, for anything
    not fit for public eyes (expect nothing, but actually look).
-5. **Test the EmailJS "request access" form's domain restriction** — added
-   2026-09-03 from §8's risk pass. It's a client-side-only `fetch`, no app-level
-   rate limit; the only thing stopping it being hit from anywhere is EmailJS's
-   dashboard-configured domain restriction. Actually call it from a different
-   origin and confirm it's rejected, don't just trust the dashboard setting is
-   correctly applied.
+5. ~~**Test the EmailJS "request access" form's domain restriction**~~ — DONE
+   (2026-09-06), and it found a real gap: calling the endpoint with a spoofed
+   `Origin` header returned `200 OK` — the domain restriction was not actually
+   enforced. Fixed properly rather than patched: the form now POSTs to a real
+   backend route (`POST /login/request-access`, IP-rate-limited, same posture as
+   `/login`) which sends via the same Resend integration `digest.py` already
+   uses (`app/services/request_access.py`). EmailJS is fully removed — no more
+   client-visible keys, no dependence on a third party's dashboard setting. See
+   `CLAUDE.md`'s updated paragraph for the mechanism.
 6. **The visibility flip itself** — `gh repo edit flyboy-byte/budget
    --visibility public` — stays with the user. Not run automatically even
    once every above box is checked.
@@ -684,15 +689,12 @@ blocks are clean, no horizontal overflow. Commit `27126cb`.
 **2. Public-facing risk pass.** Go/no-go items, weighed against the live system
 (not just the code):
 
-- **EmailJS "request access" form** — 🟡 **watch, not blocking.** Entirely
-  client-side (`fetch` straight to EmailJS's API, no app backend involved), so it
-  has zero app-level rate limiting of its own. Protection today is EmailJS's own
-  dashboard-configured domain restriction (already confirmed intentional, per
-  `CLAUDE.md`) — an attacker would need to spoof origin from a real browser
-  context, not just curl it. Recommend actually testing that domain restriction is
-  enforced (try calling it from a different origin) before the visibility flip,
-  and keep an eye on EmailJS quota/spam after going public rather than assuming
-  it'll stay quiet forever.
+- ~~**EmailJS "request access" form"**~~ — 🟢 **resolved, not just watched
+  (2026-09-06).** This assessment assumed EmailJS's dashboard domain restriction was
+  actually enforced; §5 item 5 tested it directly (spoofed `Origin` header) and got a
+  live `200 OK` — it wasn't. Fixed at the root instead of patched: the form now POSTs
+  to a real backend route (rate-limited by IP, same posture as `/login`) which sends
+  via the existing Resend integration. EmailJS is gone entirely, not just fronted.
 - **Rate limits at internet scale** — 🟢 **better than assumed, no action
   needed.** App-level: 10 attempts/5min per IP on `/login` (`app/ratelimit.py`,
   in-memory). Nginx-level: confirmed live on the box — `/login` also has its own
@@ -716,10 +718,10 @@ blocks are clean, no horizontal overflow. Commit `27126cb`.
   doesn't add a new one.** The app-level protections (SSRF allowlist, Fernet
   encryption, CSRF, whole-table export exclusion) don't change based on
   visibility — but a bank-adjacent app is a more attractive scanning target than a
-  random hobby project, which is the actual argument for treating the EmailJS
-  watch-item above as a real "before, not after" step rather than nice-to-have.
+  random hobby project, which was the actual argument for testing the EmailJS
+  item before, not after, going public. That test found a real gap and it's now
+  fixed — see above.
 
-Net: nothing found here blocks the visibility flip on its own. The one real
-follow-up (EmailJS domain-restriction test) is cheap and worth doing right before
-§5's flip, not urgently right now. Fed back into §5 (add the EmailJS test to its
-checklist) rather than opening a new doc.
+Net: nothing found here blocks the visibility flip. The one real follow-up
+(EmailJS domain-restriction test) turned out to matter — it found a live gap,
+now fixed via §5 item 5.
