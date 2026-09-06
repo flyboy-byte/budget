@@ -3,8 +3,10 @@
 **A private, self-hosted dashboard for real cash position — not a generic budgeting app.**
 
 > [!NOTE]
-> Personal project, currently private. Screenshot below is from a seeded demo
-> database, not real data. Built and driven with [Claude Code](https://claude.com/claude-code).
+> A personal project, built for one household and self-hosted — "private" here
+> describes how it's *used*, not who can read the code. The screenshot below is a
+> seeded demo database, never real financial data. Built and driven with
+> [Claude Code](https://claude.com/claude-code).
 
 It answers one question honestly: **what's actually safe to spend right now**, after
 accounting for upcoming bills, ordered-but-not-yet-billed purchases, debt minimums,
@@ -34,7 +36,7 @@ future income blur the line between them.
 | ✅ | **Auth** | Password + TOTP (authenticator app), Argon2id hashing, per-device session list with revoke, admin role for account management. |
 | ✅ | **PWA** | Installable, offline-safe static asset caching, Web Push notifications. |
 | ✅ | **Export / backup** | Per-table CSV, full JSON backup with a real tested restore path. |
-| ✅ | **Security review** | Passed a dedicated review before bank-sync went live; re-reviewed 2026-09-03 after several feature additions. Full log kept outside this repo. |
+| ✅ | **Security review** | Reviewed before bank-sync went live, again after later features, and again before this repo was opened up — that last pass found and fixed a stored XSS and an exposed OpenAPI surface. Full log kept outside this repo. |
 | 🚧 | **SimpleFIN bank sync** | Built and exercised end-to-end — but only against SimpleFIN's public demo endpoint. No real bank has been connected yet. |
 | ❌ | **Public registration** | Deliberately not built. The only ways to create a user are a CLI script or an admin-gated form — see [`ARCHITECTURE.md`](./ARCHITECTURE.md). |
 

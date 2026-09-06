@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Note for anyone reading this on GitHub:** some files referenced below —
+> `PLAN.md`, `IDEAS.md`, `MAKING_PUBLIC.md`, `codex.md`, `snapshot.md`, `design/` —
+> are deliberately git-ignored. They're session-to-session planning notes and backlog
+> scratch for the maintainer's own working copy, not public documentation, so they
+> won't exist in a fresh clone. Everything else here applies normally.
+
 ## Commands
 
 ```bash

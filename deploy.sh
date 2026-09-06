@@ -3,7 +3,7 @@
 # Run from local machine: ./deploy.sh
 set -euo pipefail
 
-# VPS host lives in .env (VPS_HOST=user@host) — not committed, repo is private but keep the pattern.
+# VPS host lives in .env (VPS_HOST=user@host), which is gitignored and never committed.
 VPS=$(grep -E '^VPS_HOST=' .env | cut -d= -f2-)
 [ -n "$VPS" ] || { echo "VPS_HOST not set in .env"; exit 1; }
 

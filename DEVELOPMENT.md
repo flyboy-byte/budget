@@ -6,6 +6,10 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full spec — data model, cal
 and multi-user notes. See [`CLAUDE.md`](./CLAUDE.md) for architecture/convention notes
 aimed specifically at AI coding agents.
 
+`IDEAS.md`, `PLAN.md` and `codex.md` are mentioned below but are git-ignored —
+they're the maintainer's local planning/backlog notes, so they won't be in a fresh
+clone. The commands that reference them still work in a working copy that has them.
+
 ## Setup
 
 ```bash
