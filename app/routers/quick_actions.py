@@ -12,10 +12,11 @@ from datetime import date
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 
-from app.deps import get_current_user_id, get_db, verify_csrf_token
+from app.deps import get_csrf_token, get_current_user_id, get_db, verify_csrf_token
 from app.money import format_cents, parse_dollars_to_cents
 from app.repositories import accounts as accounts_repo
 from app.repositories import committed_purchases as purchases_repo
+from app.repositories import debts as debts_repo
 from app.routers.dashboard import build_dashboard_context
 from app.services import bills, payments, whatif
 from app.templating import templates
@@ -25,6 +26,11 @@ router = APIRouter(prefix="/today")
 
 def _summary_fragment(request: Request, db: sqlite3.Connection, user_id: int) -> str:
     context = build_dashboard_context(db, user_id)
+    # The stale-balance alert now embeds its own inline quick-update forms (PLAN.md
+    # §3's reconciliation-screen item), so csrf_token has to ride along on every OOB
+    # refresh too, not just the full-page render (dashboard.py sets it there
+    # separately since build_dashboard_context itself stays request-agnostic).
+    context["csrf_token"] = get_csrf_token(request, db)
     return templates.get_template("partials/_dashboard_summary.html").render(
         {"request": request, **context}
     )
@@ -37,12 +43,46 @@ def _response(request: Request, db: sqlite3.Connection, user_id: int, confirmati
 @router.post("/balance", dependencies=[Depends(verify_csrf_token)])
 def quick_update_balance(
     request: Request,
-    account_id: int = Form(...),
-    balance: str = Form(...),
+    target: str = Form(...),
+    amount: str = Form(...),
+    mode: str = Form("set"),
+    direction: str = Form("+"),
     user_id: int = Depends(get_current_user_id),
     db: sqlite3.Connection = Depends(get_db),
 ):
-    updated = accounts_repo.update_balance(db, user_id, account_id, parse_dollars_to_cents(balance))
+    """Covers both accounts and debts (debts previously had no quick-update path at
+    all -- the full edit form was the only way to touch a debt's balance). `target`
+    is "account:<id>" or "debt:<id>", the same encoding bank.py's match_transaction
+    already uses. `mode` "set" is the original behavior (amount *is* the new
+    balance); "adjust" does the arithmetic for you -- amount is a delta applied to
+    the current balance_cents, signed by `direction` -- the "calculator style" ask.
+    A "+" always raises balance_cents and a "-" always lowers it, identically for
+    both entity types (for a debt that means charging more vs. paying down); no
+    per-type sign flipping needed since it operates on the raw stored number."""
+    target_type, _, target_id_raw = target.partition(":")
+    if target_type not in ("account", "debt") or not target_id_raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    target_id = int(target_id_raw)
+    amount_cents = parse_dollars_to_cents(amount)
+
+    repo = accounts_repo if target_type == "account" else debts_repo
+    current = accounts_repo.get_account(db, user_id, target_id) if target_type == "account" else debts_repo.get_debt(db, user_id, target_id)
+    if current is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    if mode == "adjust":
+        new_balance_cents = current["balance_cents"] + (amount_cents if direction == "+" else -amount_cents)
+    else:
+        new_balance_cents = amount_cents
+
+    try:
+        updated = repo.update_balance(db, user_id, target_id, new_balance_cents)
+    except sqlite3.IntegrityError:
+        db.rollback()
+        return _response(
+            request, db, user_id,
+            '<p class="alert alert--error">That would take the balance below zero.</p>',
+        )
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     db.commit()

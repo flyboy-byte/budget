@@ -358,6 +358,30 @@ def test_dashboard_non_coarse_old_debt_still_triggers_stale(client, db, user_id)
     assert ">Stale<" in response.text
 
 
+def test_dashboard_stale_row_has_inline_quick_update_form_that_clears_staleness(client, db, user_id):
+    old = "2020-01-01T00:00:00.000000Z"
+    db.execute(
+        "INSERT INTO accounts (user_id, name, type, balance_cents, updated_at) VALUES (?, 'Chase', 'checking', 50000, ?)",
+        (user_id, old),
+    )
+    db.commit()
+    account_id = db.execute("SELECT id FROM accounts WHERE user_id = ?", (user_id,)).fetchone()["id"]
+
+    response = client.get("/")
+    assert f'value="account:{account_id}"' in response.text
+    assert 'hx-post="/today/balance"' in response.text
+    csrf = response.text.split('name="csrf_token" value="')[1].split('"')[0]
+
+    update_response = client.post(
+        "/today/balance", data={"target": f"account:{account_id}", "amount": "550.00", "csrf_token": csrf}
+    )
+    assert update_response.status_code == 200
+    assert ">Stale<" not in update_response.text
+
+    follow_up = client.get("/")
+    assert ">Stale<" not in follow_up.text
+
+
 def test_dashboard_sparkline_dashes_after_last_real_update_when_stale(client, db, user_id):
     last_real = date.today() - timedelta(days=3)
     db.execute(

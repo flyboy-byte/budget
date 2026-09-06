@@ -85,10 +85,25 @@
     {% endif %}
     {% if is_stale %}
       <div class="alert alert--info mt-4">
-        <p class="mt-0">
-          {% for row in stale_rows %}{{ row.name }} last updated {{ row.days }} day{{ 's' if row.days != 1 else '' }} ago{{ "; " if not loop.last }}{% endfor %}.
-        </p>
-        <p class="mt-2"><a href="/accounts">Update balances</a> &middot; <a href="/bank">Sync from bank</a></p>
+        <p class="mt-0 mb-2">Catch these up, right here:</p>
+        <ul class="stale-row-list">
+          {% for row in stale_rows %}
+          <li class="stale-row">
+            <span>{{ row.name }} last updated {{ row.days }} day{{ 's' if row.days != 1 else '' }} ago</span>
+            <form class="inline-form" hx-post="/today/balance" hx-target="#stale-result-{{ row.kind }}-{{ row.id }}" hx-swap="innerHTML">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="target" value="{{ row.kind }}:{{ row.id }}">
+              <input type="hidden" name="mode" value="set">
+              <input type="number" step="0.01" min="0" name="amount"
+                     placeholder="{{ '%.2f'|format(row.balance_cents / 100) }}" required
+                     aria-label="Current balance for {{ row.name }}">
+              <button class="btn-link" type="submit">Update</button>
+            </form>
+            <span id="stale-result-{{ row.kind }}-{{ row.id }}"></span>
+          </li>
+          {% endfor %}
+        </ul>
+        <p class="mt-2"><a href="/accounts">Manage accounts</a> &middot; <a href="/bank">Sync from bank</a></p>
       </div>
     {% endif %}
   </section>

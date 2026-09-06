@@ -44,7 +44,7 @@ def test_quick_update_balance(client, db, user_id):
 
     response = client.post(
         "/today/balance",
-        data={"account_id": account_id, "balance": "150.00", "csrf_token": csrf},
+        data={"target": f"account:{account_id}", "amount": "150.00", "csrf_token": csrf},
     )
     assert response.status_code == 200
     assert "Balance updated" in response.text
@@ -68,7 +68,7 @@ def test_quick_update_balance_response_includes_oob_summary(client, db, user_id)
 
     response = client.post(
         "/today/balance",
-        data={"account_id": account_id, "balance": "50.00", "csrf_token": csrf},
+        data={"target": f"account:{account_id}", "amount": "50.00", "csrf_token": csrf},
     )
     assert 'id="dashboard-summary" hx-swap-oob="true"' in response.text
     # PLAN.md §1.4's watch item: the two-column split (.dashboard-main /
@@ -86,7 +86,7 @@ def test_quick_update_balance_requires_csrf(client, db, user_id):
     )
     db.commit()
     account_id = db.execute("SELECT id FROM accounts WHERE user_id = ?", (user_id,)).fetchone()["id"]
-    response = client.post("/today/balance", data={"account_id": account_id, "balance": "50.00"})
+    response = client.post("/today/balance", data={"target": f"account:{account_id}", "amount": "50.00"})
     assert response.status_code == 403
 
 
@@ -104,10 +104,101 @@ def test_quick_update_balance_scoped_to_owner(client, db, user_id):
 
     response = client.post(
         "/today/balance",
-        data={"account_id": other_account_id, "balance": "1.00", "csrf_token": csrf},
+        data={"target": f"account:{other_account_id}", "amount": "1.00", "csrf_token": csrf},
     )
     assert response.status_code == 404
     assert db.execute("SELECT balance_cents FROM accounts WHERE id = ?", (other_account_id,)).fetchone()["balance_cents"] == 999
+
+
+def test_quick_update_balance_covers_debts_too(client, db, user_id):
+    db.execute(
+        """INSERT INTO debts (user_id, name, type, balance_cents, interest_status, minimum_payment_cents)
+           VALUES (?, 'Visa', 'credit_card', 50000, 'accruing', 2000)""",
+        (user_id,),
+    )
+    db.commit()
+    debt_id = db.execute("SELECT id FROM debts WHERE user_id = ?", (user_id,)).fetchone()["id"]
+    csrf = get_csrf_token(client)
+
+    response = client.post(
+        "/today/balance",
+        data={"target": f"debt:{debt_id}", "amount": "300.00", "csrf_token": csrf},
+    )
+    assert response.status_code == 200
+    assert "Balance updated" in response.text
+    assert db.execute("SELECT balance_cents FROM debts WHERE id = ?", (debt_id,)).fetchone()["balance_cents"] == 30000
+
+
+def test_quick_update_balance_adjust_mode_subtracts(client, db, user_id):
+    db.execute(
+        "INSERT INTO accounts (user_id, name, type, balance_cents) VALUES (?, 'Checking', 'checking', 10000)",
+        (user_id,),
+    )
+    db.commit()
+    account_id = db.execute("SELECT id FROM accounts WHERE user_id = ?", (user_id,)).fetchone()["id"]
+    csrf = get_csrf_token(client)
+
+    response = client.post(
+        "/today/balance",
+        data={
+            "target": f"account:{account_id}", "amount": "40.00", "mode": "adjust", "direction": "-",
+            "csrf_token": csrf,
+        },
+    )
+    assert response.status_code == 200
+    assert db.execute("SELECT balance_cents FROM accounts WHERE id = ?", (account_id,)).fetchone()["balance_cents"] == 6000
+
+
+def test_quick_update_balance_adjust_mode_adds(client, db, user_id):
+    db.execute(
+        """INSERT INTO debts (user_id, name, type, balance_cents, interest_status, minimum_payment_cents)
+           VALUES (?, 'Visa', 'credit_card', 5000, 'accruing', 2000)""",
+        (user_id,),
+    )
+    db.commit()
+    debt_id = db.execute("SELECT id FROM debts WHERE user_id = ?", (user_id,)).fetchone()["id"]
+    csrf = get_csrf_token(client)
+
+    response = client.post(
+        "/today/balance",
+        data={
+            "target": f"debt:{debt_id}", "amount": "25.00", "mode": "adjust", "direction": "+",
+            "csrf_token": csrf,
+        },
+    )
+    assert response.status_code == 200
+    assert db.execute("SELECT balance_cents FROM debts WHERE id = ?", (debt_id,)).fetchone()["balance_cents"] == 7500
+
+
+def test_quick_update_balance_adjust_below_zero_debt_rejected(client, db, user_id):
+    db.execute(
+        """INSERT INTO debts (user_id, name, type, balance_cents, interest_status, minimum_payment_cents)
+           VALUES (?, 'Visa', 'credit_card', 5000, 'accruing', 2000)""",
+        (user_id,),
+    )
+    db.commit()
+    debt_id = db.execute("SELECT id FROM debts WHERE user_id = ?", (user_id,)).fetchone()["id"]
+    csrf = get_csrf_token(client)
+
+    response = client.post(
+        "/today/balance",
+        data={
+            "target": f"debt:{debt_id}", "amount": "100.00", "mode": "adjust", "direction": "-",
+            "csrf_token": csrf,
+        },
+    )
+    assert response.status_code == 200
+    assert "below zero" in response.text
+    assert db.execute("SELECT balance_cents FROM debts WHERE id = ?", (debt_id,)).fetchone()["balance_cents"] == 5000
+
+
+def test_quick_update_balance_rejects_unknown_target_type(client, db, user_id):
+    csrf = get_csrf_token(client)
+    response = client.post(
+        "/today/balance",
+        data={"target": "obligation:1", "amount": "1.00", "csrf_token": csrf},
+    )
+    assert response.status_code == 400
 
 
 def test_quick_record_payment(client, db, user_id):

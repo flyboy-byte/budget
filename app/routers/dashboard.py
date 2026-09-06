@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from app.deps import get_current_user_id, get_db
 from app.repositories import accounts as accounts_repo
 from app.repositories import committed_purchases as purchases_repo
+from app.repositories import debts as debts_repo
 from app.repositories import income_events as income_repo
 from app.repositories import obligations as obligations_repo
 from app.repositories import settings as settings_repo
@@ -40,9 +41,15 @@ def _balance_freshness(accounts: list[sqlite3.Row], debts: list[sqlite3.Row], th
     # high-churn debt is realistically only updated statement-to-statement, so its
     # age shouldn't dim the whole dashboard or count toward "last real update" either.
     tracked_debts = [d for d in debts if not d["coarse_tracking"]]
-    rows = list(accounts) + tracked_debts
-    ages = [(row["name"], _row_age(row)) for row in rows]
-    stale = sorted(((name, age) for name, age in ages if age > threshold), key=lambda pair: -pair[1].total_seconds())
+    # Tagged with kind so the stale callout can render an inline quick-update
+    # control per row (PLAN.md §3's reconciliation-screen idea, folded into the
+    # existing stale alert instead of a separate page -- see that item's DONE note).
+    rows = [("account", row) for row in accounts] + [("debt", row) for row in tracked_debts]
+    ages = [(kind, row, _row_age(row)) for kind, row in rows]
+    stale = sorted(
+        ((kind, row, age) for kind, row, age in ages if age > threshold),
+        key=lambda triple: -triple[2].total_seconds(),
+    )
     if not stale:
         return {"is_stale": False}
     # The most recent updated_at across every account/debt, not just the stale ones --
@@ -52,11 +59,20 @@ def _balance_freshness(accounts: list[sqlite3.Row], debts: list[sqlite3.Row], th
     # can still shift slightly from pure date-window effects (a bill rolling into/out of
     # the reserved window) with no balance edit at all -- not itemized further here, same
     # as the original §1.1 scoping note.
-    freshest_updated_at = max((row["updated_at"] for row in rows), default=None)
+    freshest_updated_at = max((row["updated_at"] for _, row in rows), default=None)
     return {
         "is_stale": True,
-        "stale_oldest_days": stale[0][1].days,
-        "stale_rows": [{"name": name, "days": age.days} for name, age in stale],
+        "stale_oldest_days": stale[0][2].days,
+        "stale_rows": [
+            {
+                "kind": kind,
+                "id": row["id"],
+                "name": row["name"],
+                "days": age.days,
+                "balance_cents": row["balance_cents"],
+            }
+            for kind, row, age in stale
+        ],
         "last_real_update_date": freshest_updated_at[:10] if freshest_updated_at else None,
     }
 
@@ -282,6 +298,7 @@ def dashboard(
     context = build_dashboard_context(db, user_id)
     context["csrf_token"] = session["csrf_secret"]
     context["quick_accounts"] = accounts_repo.list_accounts(db, user_id)
+    context["quick_debts"] = debts_repo.list_debts(db, user_id)
     context["quick_purchases"] = purchases_repo.list_purchases(db, user_id)
     context["quick_bills"] = obligations_repo.list_obligations(db, user_id)
     context["quick_income_events"] = income_repo.list_income_events(db, user_id)
