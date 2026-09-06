@@ -25,7 +25,13 @@ from app.routers import (
 )
 from app.security import SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME
 
-app = FastAPI(title="Budget")
+# docs_url/redoc_url/openapi_url are explicitly disabled: FastAPI serves all three
+# UNAUTHENTICATED by default, and they were found live in production (2026-09-06)
+# handing anyone on the internet a complete map of all 75 routes with parameter
+# names and types. Every route behind them is auth-gated, so this was reconnaissance
+# rather than direct access -- but this is a single-user private app with a real
+# bank connection and no audience for interactive API docs, so the whole surface goes.
+app = FastAPI(title="Budget", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "app" / "static")), name="static")
 
 

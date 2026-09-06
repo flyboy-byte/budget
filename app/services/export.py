@@ -7,7 +7,7 @@ import io
 import json
 import re
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 BACKUP_VERSION = 1
 
@@ -145,6 +145,36 @@ _TRANSACTION_FK_COLUMNS = {
 }
 
 
+# Columns whose values are dates the app itself always generates as ISO-8601. A
+# restore is the one path that lets an *uploaded file* write them, so they're
+# validated here rather than trusted. Not cosmetic: snapshot_date is rendered into
+# the dashboard's inline SVG sparkline, which Jinja emits with `| safe` -- a crafted
+# backup was a confirmed stored-XSS vector before this check existed (2026-09-06).
+# sparkline.py escapes its own inputs too; this is the belt to that suspenders.
+_DATE_COLUMNS = {
+    "snapshot_date", "due_date", "paid_date", "order_date", "expected_arrival_date",
+    "payment_deadline", "expected_date", "received_date", "next_due_date",
+    "transaction_date",
+}
+
+
+def _reject_malformed_dates(backup: dict) -> None:
+    for table, rows in (backup.get("tables") or {}).items():
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            for column, value in row.items():
+                if column in _DATE_COLUMNS and value not in (None, ""):
+                    try:
+                        date.fromisoformat(str(value))
+                    except (ValueError, TypeError):
+                        raise RestoreError(
+                            f"{table}.{column} is not a valid ISO-8601 date: {str(value)[:40]!r}"
+                        ) from None
+
+
 def restore_json_backup(conn: sqlite3.Connection, user_id: int, backup: dict) -> None:
     """Wipe-and-restore this user's own data only, inside the caller's transaction
     (commit/rollback is the caller's responsibility, matching app.db.get_connection).
@@ -159,6 +189,7 @@ def restore_json_backup(conn: sqlite3.Connection, user_id: int, backup: dict) ->
         raise RestoreError(f"Unsupported backup version: {backup.get('version')!r}")
     if "tables" not in backup:
         raise RestoreError("Backup is missing 'tables'")
+    _reject_malformed_dates(backup)
 
     for table in _RESTORE_DELETE_ORDER:
         conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))

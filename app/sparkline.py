@@ -2,8 +2,25 @@
 non-goal), no CDN, no build step. Server-renders a small trend line + area wash +
 end-dot, colored by whether the latest value is good (>=0) or bad (<0), with
 native <title> tooltips on each point (zero JS, works on hover and keyboard focus).
+
+SECURITY: the returned string is rendered with Jinja's `| safe` filter (it has to
+be -- it's markup), which means autoescaping is bypassed and *this module is solely
+responsible for escaping its own inputs*. Snapshot dates are server-generated in
+normal operation, but `POST /export/restore` writes attacker-supplied strings from
+an uploaded backup straight into `snapshots.snapshot_date`, so they are NOT
+trustworthy. Every interpolated value goes through `_esc()`. Confirmed exploitable
+before this was added (2026-09-06): a crafted backup broke out of the aria-label
+attribute and executed script under the production CSP, which permits
+'unsafe-inline' and therefore blocks nothing here.
 """
+from html import escape
+
 from app.money import format_cents
+
+
+def _esc(value: object) -> str:
+    """Escape for both element text and double-quoted attribute contexts."""
+    return escape(str(value), quote=True)
 
 _WIDTH = 320
 _HEIGHT = 64
@@ -68,7 +85,7 @@ def build_sparkline_svg(points: list[tuple[str, int]], last_real_date: str | Non
 
     hit_targets = "".join(
         f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="10" fill="transparent">'
-        f"<title>{date} — {format_cents(v)}</title></circle>"
+        f"<title>{_esc(date)} — {_esc(format_cents(v))}</title></circle>"
         for (cx, cy), (date, v) in zip(coords, points)
     )
 
@@ -96,7 +113,7 @@ def build_sparkline_svg(points: list[tuple[str, int]], last_real_date: str | Non
 
     return (
         f'<svg viewBox="0 0 {_WIDTH} {_HEIGHT}" width="100%" height="{_HEIGHT}" '
-        f'role="img" aria-label="Safe-to-spend trend, {points[0][0]} to {points[-1][0]}">'
+        f'role="img" aria-label="Safe-to-spend trend, {_esc(points[0][0])} to {_esc(points[-1][0])}">'
         f'<path d="{area_d}" fill="{color}" fill-opacity="0.12" stroke="none"/>'
         f"{stroke_paths}"
         f"{hollow_marker}"

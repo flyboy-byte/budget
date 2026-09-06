@@ -66,3 +66,26 @@ def test_last_real_date_before_all_points_renders_fully_solid():
     points = [("2026-07-01", 100), ("2026-07-02", 200)]
     svg = build_sparkline_svg(points, last_real_date="2026-06-01")
     assert "stroke-dasharray" not in svg
+
+
+# ----- XSS regression (2026-09-06): the SVG is rendered with Jinja's `| safe`, so
+# this module must escape its own inputs. snapshot_date is attacker-controllable
+# via an uploaded backup (POST /export/restore). -----
+
+def test_sparkline_escapes_hostile_snapshot_date_in_aria_label():
+    evil = '"><script>alert(1)</script><x y="'
+    svg = build_sparkline_svg([(evil, 1000), ("2026-09-06", 2000)])
+    assert "<script>" not in svg
+    assert "&lt;script&gt;" in svg
+
+
+def test_sparkline_escapes_hostile_snapshot_date_in_title_tooltip():
+    evil = "</title><script>alert(1)</script>"
+    svg = build_sparkline_svg([("2026-09-05", 100), (evil, 200)])
+    assert "<script>" not in svg
+    assert "</title><script>" not in svg
+
+
+def test_sparkline_single_point_with_hostile_date_is_safe():
+    svg = build_sparkline_svg([('"><script>alert(1)</script>', 500)])
+    assert "<script>" not in svg

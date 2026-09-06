@@ -16,3 +16,5 @@ IDEAS.md
 MAKING_PUBLIC.md
 codex.md
 design/
+.env.*
+*.env

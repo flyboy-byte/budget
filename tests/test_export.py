@@ -216,3 +216,22 @@ def test_backup_filename_sanitizes_crlf_and_quotes():
 def test_backup_filename_preserves_safe_username():
     name = export.backup_filename("logan")
     assert "budget-backup-logan-" in name
+
+
+# ----- restore input validation (2026-09-06) -----
+
+def test_restore_rejects_non_iso_snapshot_date(db, user_id):
+    backup = {
+        "version": export.BACKUP_VERSION,
+        "tables": {"snapshots": [{"snapshot_date": '"><script>alert(1)</script>',
+                                  "safe_to_spend_cents": 1}]},
+    }
+    with pytest.raises(export.RestoreError):
+        export.restore_json_backup(db, user_id, backup)
+
+
+def test_restore_still_accepts_valid_dates_and_nulls(db, user_id):
+    seed_data(db, user_id)
+    backup = export.export_json_backup(db, user_id)
+    export.restore_json_backup(db, user_id, backup)  # must not raise
+    assert db.execute("SELECT COUNT(*) c FROM accounts WHERE user_id = ?", (user_id,)).fetchone()["c"] == 1
