@@ -33,8 +33,12 @@ gap (not enforced) and it's fixed at the root (client-side EmailJS
 replaced entirely by a backend route + the existing Resend integration,
 see `CLAUDE.md`); §1.1's sparkline dashing and §1.3's negative-crossing
 narrative (both originally flagged "deliberately not done") are both now
-shipped and verified against a real `uvicorn`. §4, §5 (minus the now-done
-EmailJS item) remain queued (§6 already done via §8).
+shipped and verified against a real `uvicorn`. **§4 (docs catch-up) also
+done 2026-09-06** — `IMPLEMENTATION_HISTORY.md` caught up from 2026-08-03
+through tonight. Only §5 (public-readiness execution, minus the now-done
+EmailJS item) remains, and every remaining item in it needs the user's
+own decision (license, deployment-doc generality, commit-author email,
+and the visibility flip itself) — nothing left to build blind.
 
 Living state document — current reality, not a wishlist. `IDEAS.md` stays the
 open-ended backlog intake; this file is the ordered, scoped work queue pulled
@@ -626,16 +630,17 @@ from and in addition to the existing `/today` quick-actions grid. SimpleFIN auto
 is confirmed working well, so this is about manual updates for unsynced/cash
 accounts — not a bank-sync gap. Needs its own scoping pass, not part of this §3 batch.
 
-## 4. Documentation catch-up
+## ~~4. Documentation catch-up~~ — DONE (2026-09-06)
 
-- `IMPLEMENTATION_HISTORY.md` hasn't been touched since 2026-08-03 — missing
-  ~4 weeks of real shipped work: the available-balance setting, the
-  systemic CSRF list-page-delete bug + fix, the bank-sync cron timeout/retry
-  fix, the full 2026-08-26 "feels dead" fix set, and §0's auto-apply +
-  digest fix. Write these up as dated entries before public-readiness step 4
-  below, since that step explicitly says to skim this file for anything not
-  fit for public eyes — can't skim what isn't written yet. Fold in a §1
-  entry too once the UI overhaul ships, so the skim in §5 covers it.
+`IMPLEMENTATION_HISTORY.md` caught up from 2026-08-03 through tonight: the
+available-balance setting, the 2026-08-26 CSRF list-delete bug + cron-timeout
+fix + full "feels dead" fix set, the 2026-08-30 backlog triage (auto-apply,
+shelby's digest, `PLAN.md`'s own creation), the 2026-09-02/03 UI/design
+overhaul (condensed, full detail stays in §1 above), the security audit +
+README rewrite + public risk pass, and everything from tonight's §3
+completion including the EmailJS security gap it found and fixed. `snapshot.md`
+regenerated. §5 item 4 (skim this file before going public) can now actually
+happen — nothing was skimmable before this.
 
 ## 5. Public-readiness (`MAKING_PUBLIC.md` execution)
 
