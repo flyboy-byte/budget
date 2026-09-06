@@ -17,21 +17,23 @@ intermittently blocks outbound SSH/22 — HTTPS via `gh` always works regardless
 shipped 2026-09-03** — no vulnerabilities found, one low-risk pre-existing gap
 re-confirmed and tracked, README rewritten to match house style with a real
 screenshot, one cheap follow-up (EmailJS domain-restriction test) folded into §5.
-§2 (`IDEAS.md` triage) also done 2026-09-03. §3 mostly done 2026-09-05 (5
-items shipped+tested: free-text purchase categories, TOTP rate limit,
-incomplete-debt indicator, combined CSV export, bulk transaction dismiss
-— plus `shelby`'s digest 403 already done 2026-08-30. Two items remain:
-reconciliation screen deferred, coarse debt tracking decided per-debt-flag
-2026-09-05 but still needs its own behavior-scoping pass). **2026-09-06:
-closed every remaining "partial" item on the plan** — §0's digest
-spot-check confirmed `safe_to_spend` genuinely moves day-to-day now; §5's
-EmailJS domain-restriction test found a real live gap (not enforced) and
-it's fixed at the root (client-side EmailJS replaced entirely by a
-backend route + the existing Resend integration, see `CLAUDE.md`); §1.1's
-sparkline dashing and §1.3's negative-crossing narrative (both originally
-flagged "deliberately not done") are both now shipped and verified
-against a real `uvicorn`. §4, §5 (minus the now-done EmailJS item) remain
-queued (§6 already done via §8).
+§2 (`IDEAS.md` triage) also done 2026-09-03. **§3 is now 6 of 7 done**
+(2026-09-05/06): free-text purchase categories, TOTP rate limit,
+incomplete-debt indicator, combined CSV export, bulk transaction dismiss,
+and coarse debt tracking (per-debt flag, exempts a debt from the
+staleness gate — decided 2026-09-05, behavior scoped and shipped
+2026-09-06) — plus `shelby`'s digest 403 already done 2026-08-30. Only
+the reconciliation/catch-up screen remains, deliberately deferred (needs
+its own scoping session, biggest and most design-heavy item in §3).
+**2026-09-06: also closed every remaining "partial" item elsewhere on the
+plan** — §0's digest spot-check confirmed `safe_to_spend` genuinely moves
+day-to-day now; §5's EmailJS domain-restriction test found a real live
+gap (not enforced) and it's fixed at the root (client-side EmailJS
+replaced entirely by a backend route + the existing Resend integration,
+see `CLAUDE.md`); §1.1's sparkline dashing and §1.3's negative-crossing
+narrative (both originally flagged "deliberately not done") are both now
+shipped and verified against a real `uvicorn`. §4, §5 (minus the now-done
+EmailJS item) remain queued (§6 already done via §8).
 
 Living state document — current reality, not a wishlist. `IDEAS.md` stays the
 open-ended backlog intake; this file is the ordered, scoped work queue pulled
@@ -599,10 +601,14 @@ not blind-implemented this pass:**
   + bills due + income to mark received + open purchase payments) before
   implementation, not a same-session bolt-on. Worth revisiting now that §1's
   stale-state work has landed — it may fall out mostly for free from §1.1/§1.7.
-- **Coarse tracking mode for high-churn debts** — statement-balance + due-date +
-  minimum only, skip requiring an exact live balance. **Decided 2026-09-05: per-debt
-  flag, not global** (see "Decisions already made" above) — still needs a scoping
-  pass on the actual behavior change before implementation.
+- ~~**Coarse tracking mode for high-churn debts**~~ — DONE (2026-09-06). Per-debt
+  `coarse_tracking` flag (migration `0013`, plain `ADD COLUMN`) exempts a debt from
+  `_balance_freshness`'s staleness gate entirely — never triggers "Stale," never
+  counts toward the sparkline's last-real-update date. Doesn't touch what feeds
+  `safe_to_spend` (still just the minimum payment due in the window). Checkbox +
+  explanation on the debt form. The Money hub's separate fixed 30-day list-page
+  nudge (`hubs.py::_is_stale_row`) is deliberately untouched — a different, lower-
+  stakes mechanism than the dashboard's confidence gate this item was actually about.
 
 **New idea surfaced 2026-09-05** (user's own observation using the app day to day,
 not yet scoped, logged in `IDEAS.md`'s "Under consideration"): a dashboard-resident
