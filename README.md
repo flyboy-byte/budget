@@ -118,4 +118,6 @@ dependency). No SPA build step, self-hosted on a single VPS.
 
 ## License
 
-Personal project, not currently licensed for reuse.
+[GNU GPLv3](./LICENSE). Copyright © 2026 flyboy-byte. Free to use, study, and
+modify — any distributed derivative work must stay open source under the same
+license (copyleft), per GPLv3's own terms.

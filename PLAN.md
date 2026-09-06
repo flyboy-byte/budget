@@ -1,6 +1,15 @@
 # Plan
 
-Status: **In progress** — engineering backlog (auto-apply, shelby's digest) shipped
+Status: **Every section done except the final visibility flip, which is explicitly
+the user's own call.** §1-§4 and §6-§8 all shipped and deployed; §5 (public-
+readiness) is fully executed as of 2026-09-06 — GPLv3 license added, subdomains
+left as-is, commit email kept, `IMPLEMENTATION_HISTORY.md` skimmed clean — the
+only remaining action anywhere in this file is `gh repo edit flyboy-byte/budget
+--visibility public`, which the user will run themselves when ready.
+
+--- history below ---
+
+Engineering backlog (auto-apply, shelby's digest) shipped
 2026-08-30. A full UI/design audit landed 2026-09-02 (`design/`) and was folded in as
 the primary next workstream. §1.1 (freshness tier), §1.9 (cut `spending_leaks`), §1.2
 (dark-only token pass), §1.3 (hero + composition bar), §1.4 (two-column layout)
@@ -642,26 +651,27 @@ completion including the EmailJS security gap it found and fixed. `snapshot.md`
 regenerated. §5 item 4 (skim this file before going public) can now actually
 happen — nothing was skimmable before this.
 
-## 5. Public-readiness (`MAKING_PUBLIC.md` execution)
+## ~~5. Public-readiness~~ — DONE except the flip itself (2026-09-06)
 
 Do after §4, so the history skim in step 4 below has something current to skim.
 Consider doing after §1 lands too — no strict dependency, but a public repo's first
 impression (and any README screenshot from §6) should show the current design, not
 the pre-audit one.
 
-1. **License** — needs the user's actual choice (MIT vs. keep "look but
-   don't reuse," current README wording already covers the latter with no
-   file needed). Not a default to just pick.
-2. **`ARCHITECTURE.md`'s Deployment section** — decide: generalize away
-   the real subdomains/sibling-project name, or accept as public info (the
-   domains are already public DNS, so this is a "how much do you want to
-   broadcast" call, not a security one).
-3. **Commit author email** — per `MAKING_PUBLIC.md`, either accept the
-   real Gmail in history, or set a GitHub no-reply email for *future*
-   commits only. Explicitly do not rewrite existing commit history without
-   a direct, separate ask — that's destructive and hard to undo.
-4. **Skim `IMPLEMENTATION_HISTORY.md`** once §4 is written, for anything
-   not fit for public eyes (expect nothing, but actually look).
+1. ~~**License**~~ — DECIDED + DONE (2026-09-06): **GNU GPLv3**. Added `LICENSE`
+   (canonical text from gnu.org), `README.md`'s License section updated to match.
+2. ~~**`ARCHITECTURE.md`'s Deployment section**~~ — DECIDED (2026-09-06): leave
+   the real subdomains as-is. User's own call — the doc doubles as this
+   project's local AI-agent context, where the real detail is more useful than a
+   placeholder; the domains are already public DNS anyway.
+3. ~~**Commit author email**~~ — DECIDED (2026-09-06): keep the real Gmail.
+   Already baked into every existing commit either way; a future-only switch had
+   limited privacy benefit. Existing history stays untouched, as always.
+4. ~~**Skim `IMPLEMENTATION_HISTORY.md`**~~ — DONE (2026-09-06). Checked for
+   secret values, IPs, real names beyond what's already public in `README.md`,
+   and leaked keys — nothing found. Env var *names* appear throughout (normal
+   documentation, not a leak); the removed EmailJS keys were never pasted into
+   any doc.
 5. ~~**Test the EmailJS "request access" form's domain restriction**~~ — DONE
    (2026-09-06), and it found a real gap: calling the endpoint with a spoofed
    `Origin` header returned `200 OK` — the domain restriction was not actually
@@ -672,8 +682,10 @@ the pre-audit one.
    client-visible keys, no dependence on a third party's dashboard setting. See
    `CLAUDE.md`'s updated paragraph for the mechanism.
 6. **The visibility flip itself** — `gh repo edit flyboy-byte/budget
-   --visibility public` — stays with the user. Not run automatically even
-   once every above box is checked.
+   --visibility public` — every other box above is now checked
+   (2026-09-06), and the user explicitly chose to run this one themselves
+   whenever they're ready rather than have it run in this session. Not run
+   automatically regardless.
 
 ## ~~6. README rewrite~~ — DONE, via §8 (2026-09-03)
 
