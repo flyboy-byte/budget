@@ -268,3 +268,243 @@ fully built and had drifted into pure history logs; `plan.md` mixed current-stat
 with build narrative throughout, making it hard to tell "what's still true" from "what
 happened once." Split into `ARCHITECTURE.md` (current state only) and this file
 (everything dated/historical, this reorg included).
+
+## SimpleFIN available-balance setting (2026-08-05)
+
+Diagnosed via real staged data, not a hypothetical: SimpleFIN reports both a
+posted/ledger `balance` and an optional `available-balance` (balance minus pending
+holds), but the app only ever read `balance` — accounts with pending activity
+showed a stale number on the dashboard and in the digest. Two real accounts
+differed by $220 and $610 between the two figures. `available-balance` comes back
+as `0.00` for loan/credit products (meaningless there), so it's applied only to
+account-mapped links, never debt-mapped ones, and gated behind a new
+`bank_sync_use_available_balance` setting (default off, since it changes the core
+"cash on hand" number) rather than switched on silently for everyone.
+
+## The "feels dead" diagnosis and fix set (2026-08-26)
+
+A direct look at the live production DB (user `logan`), not speculation, found
+`safe_to_spend` byte-identical for six straight days: zero obligations existed,
+two debts had `minimum_payment_cents = 0`, 18 unmatched bank transactions sat
+untouched for a month, and the `transactions` ledger had 2 rows with no route in
+the app that ever read it back. Root cause: the app models commitments and the
+user had entered almost none, so nothing in the model changed day to day — not a
+trust problem, not a habit problem, a data-model-usage problem. Ranked and fixed
+same day (commit `9a4ee93`):
+
+1. **Recurring-bill detection from bank history** — `app/services/bill_detection.py`
+   (pure, no DB/network) groups outflows by a normalized merchant key and proposes a
+   bill only when the amount spread is ≤25% and the median gap matches a real
+   recurrence rule — conservative enough to keep a gas station visited weekly off
+   the list while a monthly hosting charge survives. `/bank/suggestions` lists
+   candidates with a one-tap "Add as bill"; its "Scan 120 days" button re-reads
+   history from SimpleFIN and detects in memory *without* staging anything, so it
+   can't flood the match queue. `fetch_accounts` gained a `start_date` passthrough
+   for the wider scan.
+2. **"Just spending" as a third option on an unmatched bank transaction** — before
+   this, the only choices were match-to-a-commitment or dismiss-and-forget, so the
+   app structurally could not learn what the user actually spends money on. Needed
+   migration `0010`: `target_type='other'` was already the *inflow* type for
+   income, so reusing it for spending would have inverted the sign of every
+   purchase in the change narrative — hence a distinct `'spending'` type plus a
+   free-text `category` column on `transactions`.
+3. **The activity feed** — `/ledger` plus recent entries rendered inline on
+   `/activity`. The ledger had been written to since day one; no route had ever
+   read it back, so every quick action's effect vanished into an invisible table.
+4. **Digest rewrite** — leads with WHAT HAPPENED → COMING UP → WHERE YOU STAND,
+   movement reflected in the subject line, and an explicit "nothing recorded"
+   instead of restating a static figure as though it were news.
+
+Verified end-to-end in a real browser, not just `TestClient`: accepting a detected
+bill with one tap moved `safe_to_spend` by its amount once it fell inside the
+reserved window.
+
+Two infrastructure bugs surfaced and fixed the same day, unrelated to the
+diagnosis above but found while working in the same area:
+
+- **Silent 403 on every entity list page's htmx delete button.** The six
+  per-entity list routes (debts, accounts, obligations, committed_purchases,
+  spending_leaks, income_events) never passed `csrf_token` into their template
+  context, so `base.html`'s `<meta name="csrf-token">` tag silently didn't render
+  on those pages — every `hx-delete` row-delete button on every list page sent no
+  CSRF header at all. Confirmed via real VPS logs showing repeated
+  `DELETE /debts/4 403 Forbidden` and reproduced locally with Playwright.
+  `snapshots.py` already had the correct pattern; the other six routers were
+  missing it. The test suite missed this because each entity's test helper pulled
+  its CSRF token from the `/new` page's hidden form field, never from the list
+  page's meta tag the real delete button actually depends on — added a regression
+  test per entity that reads the token the way a real browser does.
+- **Cron bank sync timing out.** Real production logs showed one bank
+  connection's SimpleFIN bridge timing out at the 6am cron sync in 25 of the last
+  38 runs, using the same 15s timeout as the interactive UI route — balances (and
+  the digest built from them) stayed stale most days until a manual "Sync now"
+  happened to land when SimpleFIN responded faster. `fetch_accounts()` gained an
+  optional timeout override: the UI route is unaffected (still 15s, a user is
+  waiting), the cron script uses 45s and retries once after a 15s pause on a
+  transient `SimpleFinError` (never on `SimpleFinRevoked`, which isn't retryable).
+
+## Backlog triage, bank-sync auto-apply, and `PLAN.md` (2026-08-30)
+
+`shelby`'s daily digest had been 403ing — turned out already unblocked at the
+infrastructure level: a separate app on the same VPS (`square-report`) had a
+Resend domain (`reports.flyboybyte.com`) already verified under the same Resend
+account as budget's API key. Fixed by adding
+`BUDGET_DIGEST_FROM_EMAIL=budget@reports.flyboybyte.com` to
+`~/.config/budget/secrets.env` — confirmed via a manual `scripts.digest` run
+(`shelby: sent`, was `error 403`).
+
+Bank-sync auto-apply shipped the same day (commit `9b9deaf`): the manual-only
+review step at `/bank/{id}/review` was found to silently stall `safe_to_spend` for
+days — sync succeeded daily but nothing ever prompted the user to actually go
+apply it. New opt-in `bank_sync_auto_apply` setting (default off) plus a
+`bank_sync_auto_apply_max_change_cents` threshold (default $250): a freshly-synced
+balance within the threshold of the currently-stored one applies immediately
+instead of waiting on manual review. A jump bigger than the threshold still falls
+through to manual review regardless of the setting — the user explicitly chose
+this over "always auto-apply" to keep a bad SimpleFIN read from silently
+overwriting a real balance.
+
+`PLAN.md` added the same day: the accumulated backlog (this fix, the "feels dead"
+set, several logged-but-untriaged `IDEAS.md` entries) got triaged into a single
+ordered, scoped work queue — the distinction from `IDEAS.md` being that everything
+in it is already ready to execute, not raw backlog.
+
+## UI/design overhaul (2026-09-02 to 2026-09-03)
+
+A full read-only design audit (`design/UI_AUDIT.md`, nine findings ranked
+Trust > Clarity > Craft) drove a ten-item ordered workstream, each independently
+shipped and deployed. Full technical detail for each lives in `PLAN.md` §1 (kept
+there rather than duplicated here in full, since several items have non-obvious
+"why not the obvious thing" reasoning worth reading in context) — summarized:
+
+- **Freshness tier** (2026-09-02) — `_balance_freshness()` reports each stale
+  account/debt's age; the headline number, composition bar, and covered-until all
+  visibly dim/suppress rather than showing a number with no real basis.
+- **Cut `spending_leaks`** (2026-09-02) — 0 rows since it shipped; superseded by
+  `target_type='spending'` free-text categories on the ledger (from the 2026-08-26
+  fix set above). Table dropped via migration `0011` after confirming 0 rows.
+- **Dark-only token pass** (2026-09-02) — the light theme and
+  `prefers-color-scheme` query removed entirely (the user has only ever used this
+  app in dark mode); token *names* kept, values retoned; radii/spacing collapsed
+  to a tighter scale; buttons switched from filled to accent-outline, which
+  surfaced and fixed a real contrast bug (`.btn--danger-solid`'s text would have
+  been invisible against its own fill under the new rule).
+- **Hero + composition bar** (2026-09-02) — the reserved-cash breakdown became a
+  real stacked bar with a legend, replacing a run-on sentence. A real bug caught
+  during visual verification (not by tests): the "Free" legend label showed a raw
+  negative number when stale-and-negative both applied — fixed with a separate
+  clamped display value, the real negative figure stays the headline.
+- **Two-column layout** (2026-09-02) — `.dashboard-grid` splits hero+quick-actions
+  (left) from the position rail (right) above ~860px. The OOB-swap target
+  (`#dashboard-summary`) can't also be the grid container once hero and rail sit
+  in different columns — solved with `display: contents` so the swap's DOM node is
+  untouched while its children become direct grid items of the outer grid.
+- **Human dates** (2026-09-03) — a `human_date` Jinja filter and matching digest
+  formatting (`Wed 9 Sep · in 6 days`) replace raw ISO dates everywhere they're
+  display-only; storage stays plain ISO-8601. Uncovered that the app-wide timezone
+  fallback was still `UTC` — changed to `America/Chicago`.
+- **Semantic colour + debt-priority table** (2026-09-03) — the "Main target" badge
+  stopped reusing the risk/warning color for a neutral plan; the debt-priority
+  table gained a real `<thead>` and a computed reason string
+  (`_debt_priority_reason()`) explaining the top row's ranking without duplicating
+  `calc.py`'s sort.
+- **First-run state** (2026-09-03) — a zero-account dashboard collapses to just
+  the label + `$0.00` plus three onboarding steps, instead of a cockpit full of
+  empty forms and a `$0.00` badge that reads as broken.
+- **`bill_reminders.py` copy** (2026-09-03) — push notifications switched from
+  "Bill due"/bill names to the same change-narrative function the digest already
+  used, per the standing rule that notifications should say what changed, not
+  what's due.
+- **Class-name cleanup** (2026-09-03) — two classes reused across a context they
+  didn't belong to (`hero-stat__note` inside a table cell, `hub-card__title` on a
+  plain card) each got their own correctly-scoped class instead.
+
+Closed with a consolidated verification pass (2026-09-03): all 16 checks —
+`pytest`, a seeded 4-state pass (first-run/healthy/negative/stale), all six
+`/today` quick actions, a full export/restore round-trip, a genuine PWA install
+via Chromium's `--app=` launch mode, service-worker cache eviction, and a keyboard
+pass — passed against a real `uvicorn`, not just `TestClient`. Two non-obvious
+findings from that pass: Chrome DevTools Protocol's `Emulation.setEmulatedMedia`
+cannot fake `display-mode: standalone` on a normal tab (only a real `--app=`
+launch produces it), and a service worker's `reg.update()` does not refire
+`activate` when the script's bytes are unchanged — genuine cache-eviction testing
+needs a full `unregister()` → `register()` cycle.
+
+## Security audit, README rewrite, and public-facing risk pass (2026-09-03)
+
+A `budget`-specific security audit (CSRF coverage, TOTP key handling, admin-role
+boundaries, push-subscription ownership, the SimpleFIN SSRF allowlist, session
+cookie flags, export exclusions) found no vulnerabilities and one already-tracked
+low-risk gap (`/settings/totp/confirm` had no rate limiter). Synced to the VPS's
+separate `~/security` documentation hub (`security-audit.md` refreshed,
+`threat-assessment.md`/`hardening-log.md`/`secrets-and-backups.md` updated),
+pre-edit versions backed up first.
+
+The README was rewritten to match the author's house style across sibling repos
+(hero + framing note, a real Playwright screenshot of the actual dashboard against
+seeded demo data, an honest ✅/🚧/❌ status table, quickstart moved above feature
+prose) rather than its previous prose-heavy version, verified rendered in a real
+browser via GitHub's markdown API before committing.
+
+A public-facing risk pass weighed five items against the live system: the
+EmailJS request-access form (flagged as a "test before going public" item — see
+below, this is exactly what later found a real gap), rate limits at internet
+scale (found better than assumed — nginx has its own `/login` limiter layered on
+top of the app's), error-response leakage (confirmed clean against the live site —
+generic 404s, no version strings, full security-header suite present), the
+admin-creation story (resolved by the README's own status table linking to
+`ARCHITECTURE.md`), and the SimpleFIN/bank-sync calculus (raises the stakes on the
+above, doesn't add a new risk).
+
+`IDEAS.md` was triaged the same day: four entries moved to "Promoted" (the
+change-narrative idea, the "can I afford this" box, the daily digest, and the
+payment-history/ledger idea, the last two both already fully shipped by this
+point and just mechanically stale in their old section).
+
+## §3 backlog completion, and closing every open follow-up (2026-09-05 to 2026-09-06)
+
+Six independent, previously-scoped backlog items shipped and deployed:
+free-text `committed_purchases` categories (migration `0012`, same
+drop-the-`CHECK`-and-rebuild shape as `0007`'s account/debt types), a rate limiter
+on `/settings/totp/confirm` (closing the gap the security audit had re-confirmed),
+an "Incomplete" badge on `/debts` for a debt missing its minimum payment or due
+date (silently never counted toward reserved cash otherwise), a combined-CSV
+export (`GET /export/csv-combined`, one file with a `table` column, picked over a
+ZIP as explicitly friendlier to paste into a chat in one shot), a "Dismiss
+selected" bulk action on `/bank/transactions` (checkbox via the HTML5 `form=`
+attribute, no nested `<form>`s needed), and a per-debt `coarse_tracking` flag
+(migration `0013`) exempting a high-churn debt from the staleness gate entirely
+without touching what feeds `safe_to_spend`.
+
+Testing the EmailJS request-access form's domain restriction — queued since the
+2026-09-03 risk pass specifically as a "verify, don't just trust the dashboard
+setting" step — found a real, live gap: calling the endpoint with a spoofed
+`Origin` header returned a `200 OK`. The restriction was not enforced. Fixed at
+the root rather than patched: the form now POSTs to a real backend route
+(`POST /login/request-access`), rate-limited by IP the same way `/login` is, which
+sends via the Resend integration the daily digest already had running
+(`app/services/request_access.py`). EmailJS was removed entirely — no more
+client-visible service/template/public keys, no dependence on a third party's own
+security posture.
+
+Two items originally scoped but deliberately left undone in the 2026-09-02 UI
+pass were closed: sparkline dashing after the last real balance update (the
+missing "real update vs. frozen repeat" signal turned out to already exist as
+`_balance_freshness`'s own freshest-`updated_at` computation) and the
+negative-state crossing narrative (`_negative_crossing_narrative()` walks every
+dated reserved item in due-date order and names whichever one's subtraction first
+takes cash on hand negative, falling back to the original narrower sentence when
+nothing dated actually crosses zero).
+
+Finally, the reconciliation/"catch-up" review screen idea and a separately-raised
+"dashboard mini balance-update widget" idea were scoped and shipped together, once
+it became clear they overlapped: rather than a new page, `/today/balance` gained
+debt support (previously accounts-only) and an "adjust by amount" mode — pick +/-
+and an amount, the server computes the new balance instead of the user doing the
+arithmetic — and the dashboard's stale-balance alert gained an inline one-field
+quick-update form per stale row, so clearing everything stale happens in one pass
+without leaving the dashboard. A real bug surfaced and fixed during Playwright
+verification: a `hidden` attribute was being silently overridden by a CSS class
+also setting `display` on the same element — an author-stylesheet rule beats the
+browser's `[hidden]` default on a specificity tie regardless of which one a reader
+would expect to "win."
