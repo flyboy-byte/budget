@@ -92,6 +92,41 @@ def test_create_debt_accepts_arbitrary_free_text_type(client, db, user_id):
     assert row["type"] == "loan from my sister"
 
 
+def test_create_debt_with_coarse_tracking_checked(client, db, user_id):
+    csrf = get_csrf_token(client)
+    client.post(
+        "/debts",
+        data={
+            "name": "Daily Card",
+            "type": "credit_card",
+            "balance": "500.00",
+            "minimum_payment": "25.00",
+            "interest_status": "accruing",
+            "coarse_tracking": "1",
+            "csrf_token": csrf,
+        },
+    )
+    row = db.execute("SELECT coarse_tracking FROM debts WHERE user_id = ?", (user_id,)).fetchone()
+    assert row["coarse_tracking"] == 1
+
+
+def test_create_debt_without_coarse_tracking_defaults_off(client, db, user_id):
+    csrf = get_csrf_token(client)
+    client.post(
+        "/debts",
+        data={
+            "name": "Fixed Loan",
+            "type": "personal",
+            "balance": "500.00",
+            "minimum_payment": "25.00",
+            "interest_status": "accruing",
+            "csrf_token": csrf,
+        },
+    )
+    row = db.execute("SELECT coarse_tracking FROM debts WHERE user_id = ?", (user_id,)).fetchone()
+    assert row["coarse_tracking"] == 0
+
+
 def test_new_debt_form_shows_type_dropdown(client):
     response = client.get("/debts/new")
     assert response.status_code == 200
@@ -187,6 +222,38 @@ def test_update_debt(client, db, user_id):
     row = db.execute("SELECT * FROM debts WHERE id = ?", (debt_id,)).fetchone()
     assert row["balance_cents"] == 50000
     assert row["interest_status"] == "not_accruing"
+
+
+def test_update_debt_can_turn_on_coarse_tracking(client, db, user_id):
+    csrf = get_csrf_token(client)
+    client.post(
+        "/debts",
+        data={
+            "name": "Visa",
+            "type": "credit_card",
+            "balance": "1000.00",
+            "minimum_payment": "30.00",
+            "interest_status": "accruing",
+            "csrf_token": csrf,
+        },
+    )
+    debt_id = db.execute("SELECT id FROM debts WHERE user_id = ?", (user_id,)).fetchone()["id"]
+
+    client.post(
+        f"/debts/{debt_id}",
+        data={
+            "name": "Visa",
+            "type": "credit_card",
+            "balance": "1000.00",
+            "minimum_payment": "30.00",
+            "interest_status": "accruing",
+            "is_active": "1",
+            "coarse_tracking": "1",
+            "csrf_token": csrf,
+        },
+    )
+    row = db.execute("SELECT coarse_tracking FROM debts WHERE id = ?", (debt_id,)).fetchone()
+    assert row["coarse_tracking"] == 1
 
 
 def test_deactivate_debt_with_nonzero_balance_rejected(client, db, user_id):

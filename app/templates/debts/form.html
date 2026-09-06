@@ -52,6 +52,11 @@
         <input type="checkbox" id="is_flexible_payment" name="is_flexible_payment" value="1" {% if debt and debt.is_flexible_payment %}checked{% endif %}>
         <label for="is_flexible_payment">Flexible payment (no fixed schedule pressure)</label>
       </div>
+      <div class="field checkbox-field">
+        <input type="checkbox" id="coarse_tracking" name="coarse_tracking" value="1" {% if debt and debt.coarse_tracking %}checked{% endif %}>
+        <label for="coarse_tracking">Coarse tracking (high-churn balance, e.g. a card you use daily)</label>
+        <small>Exempts this debt from the "Stale" check — update it statement to statement instead of live. Doesn't change what counts toward safe-to-spend (only the minimum payment does).</small>
+      </div>
       <div class="field">
         <label for="priority">Manual priority override (0 = none)</label>
         <input type="number" id="priority" name="priority" value="{{ debt.priority if debt else 0 }}">

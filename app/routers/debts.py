@@ -81,6 +81,7 @@ def create_debt(
     is_flexible_payment: str = Form(None),
     priority: int = Form(0),
     notes: str = Form(""),
+    coarse_tracking: str = Form(None),
     user_id: int = Depends(get_current_user_id),
     db: sqlite3.Connection = Depends(get_db),
 ):
@@ -97,6 +98,7 @@ def create_debt(
         is_flexible_payment=1 if is_flexible_payment else 0,
         priority=priority,
         notes=notes or None,
+        coarse_tracking=1 if coarse_tracking else 0,
     )
     db.commit()
     return RedirectResponse(url="/debts", status_code=status.HTTP_303_SEE_OTHER)
@@ -146,6 +148,7 @@ def update_debt(
     priority: int = Form(0),
     is_active: str = Form(None),
     notes: str = Form(""),
+    coarse_tracking: str = Form(None),
     user_id: int = Depends(get_current_user_id),
     db: sqlite3.Connection = Depends(get_db),
     csrf_token: str = Depends(get_csrf_token),
@@ -186,6 +189,7 @@ def update_debt(
         is_flexible_payment=1 if is_flexible_payment else 0,
         priority=priority,
         notes=notes or None,
+        coarse_tracking=1 if coarse_tracking else 0,
     )
     db.commit()
     if not updated:

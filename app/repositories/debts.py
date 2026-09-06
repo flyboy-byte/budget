@@ -51,12 +51,13 @@ def create_debt(
     is_flexible_payment: int = 0,
     priority: int = 0,
     notes: str | None = None,
+    coarse_tracking: int = 0,
 ) -> int:
     cur = conn.execute(
         """INSERT INTO debts
            (user_id, name, type, balance_cents, apr_bps, minimum_payment_cents, next_due_date,
-            interest_status, is_flexible_payment, priority, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            interest_status, is_flexible_payment, priority, notes, coarse_tracking)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             user_id,
             name,
@@ -69,6 +70,7 @@ def create_debt(
             is_flexible_payment,
             priority,
             notes,
+            coarse_tracking,
         ),
     )
     return cur.lastrowid
@@ -89,12 +91,13 @@ def update_debt(
     is_flexible_payment: int = 0,
     priority: int = 0,
     notes: str | None = None,
+    coarse_tracking: int = 0,
 ) -> bool:
     cur = conn.execute(
         """UPDATE debts
            SET name = ?, type = ?, balance_cents = ?, apr_bps = ?, minimum_payment_cents = ?,
                next_due_date = ?, interest_status = ?, is_flexible_payment = ?, priority = ?,
-               is_active = ?, notes = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+               is_active = ?, notes = ?, coarse_tracking = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
            WHERE user_id = ? AND id = ?""",
         (
             name,
@@ -108,6 +111,7 @@ def update_debt(
             priority,
             is_active,
             notes,
+            coarse_tracking,
             user_id,
             debt_id,
         ),

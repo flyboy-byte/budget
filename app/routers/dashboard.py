@@ -36,7 +36,11 @@ def _balance_freshness(accounts: list[sqlite3.Row], debts: list[sqlite3.Row], th
     30-day badge — this one gates whether the *headline number* gets shown at full
     confidence, a stricter bar than "worth a nudge on a list page"."""
     threshold = timedelta(days=threshold_days)
-    rows = list(accounts) + list(debts)
+    # Coarse-tracking debts (PLAN.md §3, per-debt flag) are exempt entirely -- a
+    # high-churn debt is realistically only updated statement-to-statement, so its
+    # age shouldn't dim the whole dashboard or count toward "last real update" either.
+    tracked_debts = [d for d in debts if not d["coarse_tracking"]]
+    rows = list(accounts) + tracked_debts
     ages = [(row["name"], _row_age(row)) for row in rows]
     stale = sorted(((name, age) for name, age in ages if age > threshold), key=lambda pair: -pair[1].total_seconds())
     if not stale:

@@ -322,6 +322,42 @@ def test_dashboard_shows_stale_state_for_an_old_balance(client, db, user_id):
     assert 'href="/accounts"' in response.text
 
 
+def test_dashboard_coarse_tracking_debt_exempt_from_stale_check(client, db, user_id):
+    old = "2020-01-01T00:00:00.000000Z"
+    # An account has to exist for is_first_run to be false; keep it fresh so only
+    # the debt's staleness (or exemption from it) is under test.
+    db.execute(
+        "INSERT INTO accounts (user_id, name, type, balance_cents) VALUES (?, 'Checking', 'checking', 50000)",
+        (user_id,),
+    )
+    db.execute(
+        """INSERT INTO debts
+           (user_id, name, type, balance_cents, interest_status, minimum_payment_cents, updated_at, coarse_tracking)
+           VALUES (?, 'Daily Card', 'credit_card', 20000, 'accruing', 5000, ?, 1)""",
+        (user_id, old),
+    )
+    db.commit()
+    response = client.get("/")
+    assert ">Stale<" not in response.text
+
+
+def test_dashboard_non_coarse_old_debt_still_triggers_stale(client, db, user_id):
+    old = "2020-01-01T00:00:00.000000Z"
+    db.execute(
+        "INSERT INTO accounts (user_id, name, type, balance_cents) VALUES (?, 'Checking', 'checking', 50000)",
+        (user_id,),
+    )
+    db.execute(
+        """INSERT INTO debts
+           (user_id, name, type, balance_cents, interest_status, minimum_payment_cents, updated_at, coarse_tracking)
+           VALUES (?, 'Daily Card', 'credit_card', 20000, 'accruing', 5000, ?, 0)""",
+        (user_id, old),
+    )
+    db.commit()
+    response = client.get("/")
+    assert ">Stale<" in response.text
+
+
 def test_dashboard_sparkline_dashes_after_last_real_update_when_stale(client, db, user_id):
     last_real = date.today() - timedelta(days=3)
     db.execute(
