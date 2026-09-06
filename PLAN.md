@@ -18,12 +18,20 @@ shipped 2026-09-03** — no vulnerabilities found, one low-risk pre-existing gap
 re-confirmed and tracked, README rewritten to match house style with a real
 screenshot, one cheap follow-up (EmailJS domain-restriction test) folded into §5.
 §2 (`IDEAS.md` triage) also done 2026-09-03. §3 mostly done 2026-09-05 (5
-items shipped+tested this pass: free-text purchase categories, TOTP rate
-limit, incomplete-debt indicator, combined CSV export, bulk transaction
-dismiss — plus `shelby`'s digest 403 already done 2026-08-30. Two items
-remain: reconciliation screen and coarse debt tracking, both need a user
-decision before scoping, not blind-implemented). §4, §5 remain queued (§6
-already done via §8).
+items shipped+tested: free-text purchase categories, TOTP rate limit,
+incomplete-debt indicator, combined CSV export, bulk transaction dismiss
+— plus `shelby`'s digest 403 already done 2026-08-30. Two items remain:
+reconciliation screen deferred, coarse debt tracking decided per-debt-flag
+2026-09-05 but still needs its own behavior-scoping pass). **2026-09-06:
+closed every remaining "partial" item on the plan** — §0's digest
+spot-check confirmed `safe_to_spend` genuinely moves day-to-day now; §5's
+EmailJS domain-restriction test found a real live gap (not enforced) and
+it's fixed at the root (client-side EmailJS replaced entirely by a
+backend route + the existing Resend integration, see `CLAUDE.md`); §1.1's
+sparkline dashing and §1.3's negative-crossing narrative (both originally
+flagged "deliberately not done") are both now shipped and verified
+against a real `uvicorn`. §4, §5 (minus the now-done EmailJS item) remain
+queued (§6 already done via §8).
 
 Living state document — current reality, not a wishlist. `IDEAS.md` stays the
 open-ended backlog intake; this file is the ordered, scoped work queue pulled
@@ -124,11 +132,12 @@ account (Playwright) — badge, muted number, suppressed covered-until, named ca
 dimmed rail all confirmed rendering correctly; first-run (0 accounts) confirmed to stay
 non-stale. `CACHE_NAME` bumped (`v2` → `v3`) since this touched `app.css`.
 
-**Deliberately not done**: the sparkline dashing-after-last-real-point from
-`STATE_SPEC` — the daily auto-captured snapshot doesn't currently distinguish "a real
-balance change" from "the same frozen number captured again," so dashing it correctly
-needs that distinction first. Sparkline still renders solid throughout. Worth a
-follow-up if the stale state turns out to need it in practice; not scoped further here.
+~~**Sparkline dashing-after-last-real-point**~~ — DONE (2026-09-06). The
+distinguishing signal needed was max(`updated_at`) across accounts/debts, already
+computed for `is_stale`. `build_sparkline_svg` now splits the stroke there: solid
+before, dashed after, hollow marker at the last real point — only when stale, per
+`STATE_SPEC.md`. See `app/sparkline.py` / `_balance_freshness`'s
+`last_real_update_date`.
 
 ### ~~1.2 Dark-only token pass~~ — DONE (2026-09-02)
 
@@ -195,16 +204,18 @@ legend line from contradicting itself. Added a regression test
 (`test_composition_bar_stays_four_segment_when_stale_and_negative`) since
 the existing suite's positive-only fixtures never would have caught it.
 
-**Deliberately not done**: `STATE_SPEC.md`'s stale-composition-bar heading
+**Still deliberately not done**: `STATE_SPEC.md`'s stale-composition-bar heading
 ("Where the $X sat on &lt;date&gt;") — reused the existing "as of N days ago"
 note instead rather than fabricating a single as-of date across
-possibly-differently-aged accounts. Also not done: the full negative-state
-narrative sentence ("Verizon clears Friday and takes you under... paycheck
-lands Sat 12 Sep") — that needs new logic to identify *which* upcoming
-obligation pushes the balance under, which is a real feature, not a template
-change, and wasn't itemized in `PLAN_ADDITIONS.md`'s scope for this item.
-Kept the existing, narrower "You need $X more to cover what's reserved"
-sentence. Flagging both here rather than silently skipping them.
+possibly-differently-aged accounts. Genuinely cosmetic, low value; not revisited.
+
+~~The full negative-state narrative sentence~~ — DONE (2026-09-06). New
+`_negative_crossing_narrative()` walks every dated reserved item in due-date order,
+subtracting from cash on hand, and names the one whose subtraction first takes the
+running total negative — falls back to the existing "You need $X more" sentence
+when nothing dated actually crosses zero. Verified against a real `uvicorn`:
+"Verizon clears Sat 5 Sep · today and takes you under. Paycheck lands Thu 10 Sep ·
+in 5 days." — matches this spec's own example shape exactly.
 
 Verified visually against a real `uvicorn` across all three states (healthy,
 negative, stale-and-negative) — bar proportions, legend labels, hatched
