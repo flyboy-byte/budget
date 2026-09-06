@@ -10,3 +10,9 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+snapshot.md
+PLAN.md
+IDEAS.md
+MAKING_PUBLIC.md
+codex.md
+design/

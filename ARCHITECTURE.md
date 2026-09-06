@@ -164,8 +164,10 @@ until the user confirms via a real create action.
 
 ```
 budget/
-  README.md, DEVELOPMENT.md, CLAUDE.md, ARCHITECTURE.md, IMPLEMENTATION_HISTORY.md,
-  IDEAS.md, MAKING_PUBLIC.md, security-audit.md
+  README.md, DEVELOPMENT.md, CLAUDE.md, ARCHITECTURE.md, IMPLEMENTATION_HISTORY.md
+  (PLAN.md, IDEAS.md, MAKING_PUBLIC.md, codex.md, snapshot.md, design/ are
+  git-ignored -- working notes and a past design-audit input, kept local-only,
+  not part of the public repo)
   app/
     main.py, config.py, db.py, security.py, deps.py, money.py, templating.py,
     ratelimit.py, sparkline.py, useragent.py, crypto.py, totp_qr.py

@@ -106,15 +106,11 @@ dependency). No SPA build step, self-hosted on a single VPS.
 - [`DEVELOPMENT.md`](./DEVELOPMENT.md) — local setup, common commands, project layout.
 - [`CLAUDE.md`](./CLAUDE.md) — architecture and conventions for AI coding agents
   working in this repo.
-- [`MAKING_PUBLIC.md`](./MAKING_PUBLIC.md) — checklist for if this repo is ever made
-  public (it's currently private).
-- [`IDEAS.md`](./IDEAS.md) — living backlog of feature ideas/intentions, triaged each
-  session; `ARCHITECTURE.md` remains the source of truth for what's actually built.
-- [`codex.md`](./codex.md) — brief for running the local `codex` CLI as an idea
-  generator against this project; its output lands in `IDEAS.md`, not code.
-- `snapshot.md` — combined dump of the docs above, for pasting into another AI
-  chat/tool. Regenerate with `.venv/bin/python -m scripts.make_snapshot` — don't
-  hand-edit it.
+
+A handful of other files (`PLAN.md`, `IDEAS.md`, `MAKING_PUBLIC.md`, `codex.md`,
+`snapshot.md`, `design/`) are git-ignored on purpose — session-to-session planning
+notes, backlog scratch, and a past design-audit input, not meant as public-facing
+documentation.
 
 ## License
 
