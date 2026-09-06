@@ -51,7 +51,11 @@
       <p class="hero-stat__note">This number is running on old balances. Doesn't include future paychecks.</p>
     {% elif safe_to_spend_cents < 0 %}
       <p class="hero-stat__note text-bad">
-        You need {{ (-safe_to_spend_cents) | money }} more to cover what's reserved.
+        {% if negative_crossing_narrative %}
+          {{ negative_crossing_narrative }}
+        {% else %}
+          You need {{ (-safe_to_spend_cents) | money }} more to cover what's reserved.
+        {% endif %}
       </p>
       <div class="composition-bar">
         <div class="composition-bar__segment composition-bar__segment--covered" style="width: {{ covered_pct }}%"></div>

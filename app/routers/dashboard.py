@@ -12,6 +12,7 @@ from app.repositories import settings as settings_repo
 from app.repositories import snapshots as snapshots_repo
 from app.security import SESSION_COOKIE_NAME, get_valid_session
 from app.services import calc
+from app.services import dates
 from app.services import narrative
 from app.sparkline import build_sparkline_svg
 from app.templating import templates
@@ -103,6 +104,59 @@ def _composition_bar(
     }
 
 
+def _negative_crossing_narrative(
+    conn: sqlite3.Connection,
+    user_id: int,
+    today: date,
+    window_end: str,
+    cash_on_hand_cents: int,
+    debt_priority_rows: list[sqlite3.Row],
+    paycheck: sqlite3.Row | None,
+) -> str | None:
+    """STATE_SPEC.md's fuller negative-state sentence ("Verizon clears Friday and
+    takes you under... paycheck lands Sat 12 Sep") -- deliberately not done in §1.3,
+    since it needs new logic to identify *which* upcoming item actually pushes the
+    balance under, not just that it's under. Walks every dated reserved item in
+    due-date order, subtracting from cash on hand, and returns the one whose
+    subtraction first takes the running total negative. Presentational derivation
+    of calc.py's own inputs (same reasoning as _composition_bar above) -- reuses
+    debt_priority_rows the caller already computed instead of re-querying debts.
+    Returns None when nothing dated in the window actually crosses zero (e.g.
+    already negative before any of them), so the caller can fall back to the
+    existing narrower sentence."""
+    items: list[tuple[str, str, int]] = []
+    for row in obligations_repo.list_obligations(conn, user_id):
+        if not row["is_paid"] and row["due_date"] and row["due_date"] <= window_end:
+            items.append((row["due_date"], row["name"], row["amount_cents"]))
+    for row in debt_priority_rows:
+        if row["next_due_date"] and row["next_due_date"] <= window_end and row["minimum_payment_cents"] > 0:
+            items.append((row["next_due_date"], row["name"], row["minimum_payment_cents"]))
+    for row in purchases_repo.list_purchases(conn, user_id):
+        if row["status"] in ("ordered", "arrived", "partially_paid"):
+            # Always reserved regardless of any deadline -- treat as already due.
+            due_date = row["payment_deadline"] or today.isoformat()
+            items.append((due_date, row["name"], row["remaining_cents"]))
+        elif row["status"] == "planned" and row["payment_deadline"] and row["payment_deadline"] <= window_end:
+            items.append((row["payment_deadline"], row["name"], row["remaining_cents"]))
+
+    items.sort(key=lambda item: item[0])
+    running = cash_on_hand_cents
+    crossing: tuple[str, str] | None = None
+    for due_date, name, amount_cents in items:
+        running -= amount_cents
+        if running < 0:
+            crossing = (due_date, name)
+            break
+    if crossing is None:
+        return None
+
+    due_date, name = crossing
+    sentence = f"{name} clears {dates.human_date(due_date, today)} and takes you under."
+    if paycheck is not None:
+        sentence += f" Paycheck lands {dates.human_date(paycheck['expected_date'], today)}."
+    return sentence
+
+
 def _debt_priority_reason(top_debt: sqlite3.Row) -> str:
     """Explains why the top row of the debt-priority table ranked first, mirroring
     calc.py::debt_priority's own tiering without duplicating its sort — a debt is
@@ -181,6 +235,13 @@ def build_dashboard_context(db: sqlite3.Connection, user_id: int) -> dict:
         freshness["is_stale"],
     )
 
+    paycheck = calc.next_paycheck(db, user_id, today)
+    negative_crossing_narrative = None
+    if safe_to_spend_cents < 0 and not freshness["is_stale"]:
+        negative_crossing_narrative = _negative_crossing_narrative(
+            db, user_id, today, window_end, cash_on_hand_cents, debt_priority_rows, paycheck
+        )
+
     return {
         **freshness,
         **composition_bar,
@@ -194,8 +255,9 @@ def build_dashboard_context(db: sqlite3.Connection, user_id: int) -> dict:
         "purchases_reserved_cents": purchases_reserved_cents,
         "safe_to_spend_cents": safe_to_spend_cents,
         "forecast_position_cents": calc.forecast_position(db, user_id, today),
-        "next_paycheck": calc.next_paycheck(db, user_id, today),
+        "next_paycheck": paycheck,
         "next_due_payment": calc.next_due_payment(db, user_id),
+        "negative_crossing_narrative": negative_crossing_narrative,
         "debt_priority": debt_priority_rows,
         "debt_payoffs": debt_payoffs,
         "debt_priority_reason": _debt_priority_reason(debt_priority_rows[0]) if debt_priority_rows else None,

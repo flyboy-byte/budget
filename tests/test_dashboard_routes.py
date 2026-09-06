@@ -141,6 +141,60 @@ def test_dashboard_shows_negative_badge_when_overcommitted(client, db, user_id):
     assert "badge--risky" in response.text
 
 
+def test_dashboard_negative_narrative_names_the_crossing_item(client, db, user_id):
+    db.execute(
+        "INSERT INTO accounts (user_id, name, type, balance_cents) VALUES (?, 'Checking', 'checking', 100)",
+        (user_id,),
+    )
+    db.execute(
+        "INSERT INTO obligations (user_id, name, category, amount_cents, due_date) VALUES (?, 'Verizon', 'utilities', 90000, ?)",
+        (user_id, date.today().isoformat()),
+    )
+    db.commit()
+    response = client.get("/")
+    assert "Verizon clears" in response.text
+    assert "takes you under" in response.text
+    assert "You need" not in response.text
+
+
+def test_dashboard_negative_narrative_includes_next_paycheck(client, db, user_id):
+    db.execute(
+        "INSERT INTO accounts (user_id, name, type, balance_cents) VALUES (?, 'Checking', 'checking', 100)",
+        (user_id,),
+    )
+    db.execute(
+        "INSERT INTO obligations (user_id, name, category, amount_cents, due_date) VALUES (?, 'Verizon', 'utilities', 90000, ?)",
+        (user_id, date.today().isoformat()),
+    )
+    paycheck_date = (date.today() + timedelta(days=5)).isoformat()
+    db.execute(
+        """INSERT INTO income_events (user_id, source, expected_amount_cents, expected_date, confidence)
+           VALUES (?, 'Paycheck', 200000, ?, 'confirmed')""",
+        (user_id, paycheck_date),
+    )
+    db.commit()
+    response = client.get("/")
+    assert "Verizon clears" in response.text
+    assert "Paycheck lands" in response.text
+
+
+def test_dashboard_negative_narrative_falls_back_when_nothing_crosses_with_a_date(client, db, user_id):
+    # Negative purely from the protected savings floor -- no dated obligation/debt/
+    # purchase actually crosses zero, so there's nothing to name.
+    db.execute(
+        "INSERT INTO accounts (user_id, name, type, balance_cents) VALUES (?, 'Checking', 'checking', 100)",
+        (user_id,),
+    )
+    db.execute(
+        "INSERT INTO settings (user_id, key, value) VALUES (?, 'protected_savings_floor_cents', '5000')",
+        (user_id,),
+    )
+    db.commit()
+    response = client.get("/")
+    assert "You need" in response.text
+    assert "clears" not in response.text
+
+
 def test_dashboard_reserved_breakdown_shows_only_nonzero_sources(client, db, user_id):
     from datetime import date
 
