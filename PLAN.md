@@ -17,14 +17,15 @@ intermittently blocks outbound SSH/22 — HTTPS via `gh` always works regardless
 shipped 2026-09-03** — no vulnerabilities found, one low-risk pre-existing gap
 re-confirmed and tracked, README rewritten to match house style with a real
 screenshot, one cheap follow-up (EmailJS domain-restriction test) folded into §5.
-§2 (`IDEAS.md` triage) also done 2026-09-03. **§3 is now 6 of 7 done**
-(2026-09-05/06): free-text purchase categories, TOTP rate limit,
+§2 (`IDEAS.md` triage) also done 2026-09-03. **§3 is entirely done as of
+2026-09-06**: free-text purchase categories, TOTP rate limit,
 incomplete-debt indicator, combined CSV export, bulk transaction dismiss,
-and coarse debt tracking (per-debt flag, exempts a debt from the
-staleness gate — decided 2026-09-05, behavior scoped and shipped
-2026-09-06) — plus `shelby`'s digest 403 already done 2026-08-30. Only
-the reconciliation/catch-up screen remains, deliberately deferred (needs
-its own scoping session, biggest and most design-heavy item in §3).
+coarse debt tracking (per-debt flag), and the reconciliation/catch-up
+screen (merged with the calculator-style balance-widget idea per the
+user's own framing — `/today/balance` now covers debts with an
+adjust-by-amount mode, and the stale-balance alert got inline
+per-row quick-update forms, instead of a separate new page) — plus
+`shelby`'s digest 403 already done 2026-08-30.
 **2026-09-06: also closed every remaining "partial" item elsewhere on the
 plan** — §0's digest spot-check confirmed `safe_to_spend` genuinely moves
 day-to-day now; §5's EmailJS domain-restriction test found a real live
@@ -562,7 +563,7 @@ has since shipped. Left untouched, genuinely still open: everything under §3,
 the "dismiss all" bulk-action idea, and the two-minute data-fixes note (needs
 the user's real numbers — not something to invent, so not touched this pass).
 
-## 3. Small scoped backlog items (each independent, pick any order)
+## ~~3. Small scoped backlog items~~ — DONE (2026-09-06)
 
 - ~~**`committed_purchases` free-text categories**~~ — DONE (2026-09-05). Migration
   `0012_free_text_purchase_categories.sql` (same rebuild-table shape as
@@ -593,14 +594,22 @@ the user's real numbers — not something to invent, so not touched this pass).
   transactions, dismissed 2 via the actual checkboxes, confirmed the third untouched.
 - ~~**`shelby`'s digest email 403ing**~~ — DONE (2026-08-30). See §0.
 
-**Still open, both explicitly need a decision from the user before scoping further —
-not blind-implemented this pass:**
+~~**Reconciliation / "catch-up" review screen**~~ — DONE (2026-09-06), merged with
+the dashboard mini balance-update widget idea per the user's own framing that they
+overlap ("scope them together... make the existing function better"). Rather than a
+separate new page: (1) `/today/balance` now covers debts too (previously
+accounts-only — a real gap, not just a nice-to-have) and gained an "adjust by
+amount" mode (+/- delta against the current balance, computed server-side — the
+actual "calculator feel" ask) alongside the original "set exact balance"; (2) the
+dashboard's stale-balance alert now lists each stale account/debt with its own
+inline one-field quick-update form, so clearing everything stale happens in one
+pass on the dashboard itself, no navigation. Bills due / income to mark received /
+purchase payments were already all listed in the existing "Update today" grid — the
+only genuine gaps were debt balance updates and the "type the new absolute number"
+friction, both closed here. Found and fixed a real CSS/JS bug via Playwright along
+the way: a `hidden` attribute silently overridden by a same-element class also
+setting `display`. Verified end-to-end against a real `uvicorn` + Playwright.
 
-- **Reconciliation / "catch-up" review screen** — biggest, most design-y item here.
-  Needs its own scoping pass (what exactly gets surfaced in one screen: stale balances
-  + bills due + income to mark received + open purchase payments) before
-  implementation, not a same-session bolt-on. Worth revisiting now that §1's
-  stale-state work has landed — it may fall out mostly for free from §1.1/§1.7.
 - ~~**Coarse tracking mode for high-churn debts**~~ — DONE (2026-09-06). Per-debt
   `coarse_tracking` flag (migration `0013`, plain `ADD COLUMN`) exempts a debt from
   `_balance_freshness`'s staleness gate entirely — never triggers "Stale," never

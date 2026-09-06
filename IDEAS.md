@@ -16,35 +16,6 @@ _(nothing yet — drop ideas here)_
 
 ## Under consideration
 
-- **Dashboard mini balance-update widget** — raised 2026-09-05, user's own
-  observation after using the app for a few days ("the only thing I keep
-  thinking about"). The full 7-form "Update today" quick-actions grid is
-  suppressed on first-run and otherwise sits below the hero — the ask is a
-  smaller, always-visible balance-update control on the main dashboard
-  itself (account dropdown + amount, "calculator feel"), separate from and
-  in addition to the existing `/today` grid's balance-update form. Not
-  scoped yet: whether it lives inside `_dashboard_summary.html` or as its
-  own card, whether it reuses `quick_actions.py::_summary_fragment()`'s OOB
-  pattern (it should, per `CLAUDE.md`'s standing rule for any new
-  quick-action-shaped route), and how it avoids duplicating the existing
-  balance-update form rather than becoming a second slightly-different one.
-  SimpleFIN auto-sync is confirmed working well per the user, so this is
-  about manual updates for unsynced/cash accounts, not a bank-sync gap.
-
-- **"Dismiss all" (and/or "just spending all") on `/bank/transactions`.**
-  Observed directly 2026-08-30 in the VPS access log: the user manually
-  worked through 15 individual unmatched transactions one at a time (a
-  `/dismiss` or `/spending` POST per row) in under a minute. Each row is
-  its own tiny form/request today — no bulk action exists. Shape: a
-  checkbox per row (mirroring `bank/review.html`'s existing
-  `<input type="checkbox" name="staging_id">` pattern for balance review)
-  plus one "Dismiss selected" button, and maybe a separate "mark selected
-  as spending" for the common case of clearing out a page of ordinary
-  purchases at once with one shared category. `repo.dismiss_transaction`
-  and `bank_transactions.record_as_spending` already take one `staging_id`
-  at a time — the new route would just loop over a submitted list, same
-  pattern `apply_sync` already uses for balance staging.
-
 ### 2026-08-26 diagnosis: "sorta helpful, feels dead"
 
 Evidence from the live production DB (user `logan`), not speculation:
@@ -233,13 +204,6 @@ card) via `PLAN.md` §1.9, table dropped by migration `0011_drop_spending_leaks.
   instead). Discussed alongside the "can I afford this" idea as the other
   candidate for escaping the CRUD feel; not chosen as the lead candidate but not
   rejected either.
-- **Reconciliation / "catch-up" review workflow** — a dedicated screen that surfaces
-  stale account/debt balances, bills due soon, recurring income ready to mark received,
-  and outstanding purchase payments all in one pass, clearable in one sitting instead of
-  scattered across separate CRUD screens. Flagged by a `codex` product review
-  (2026-07-09) as the top move to make the app feel like an operational cockpit instead
-  of a database — matches the existing "Today is a cockpit" direction but as a bounded
-  session rather than an always-visible form set.
 - **Event-style entry via the `transactions` table** — accept "I spent $X on this card,"
   "I paid $X toward this card from checking," "I got paid $X" instead of always asking
   for the new exact final balance. Same underlying gap as the "Payment history /
@@ -550,8 +514,30 @@ card) via `PLAN.md` §1.9, table dropped by migration `0011_drop_spending_leaks.
   use.
 - **Admin-gated multiuser registration** (`POST /settings/users`) — shipped
   2026-07-09, commit `630ed57`.
-- **"Email admin to add an account" login-page form (EmailJS)** — shipped 2026-07-09,
-  commit `6d59abc`.
+- **"Email admin to add an account" login-page form** — shipped 2026-07-09, commit
+  `6d59abc` (originally via EmailJS's client-side API). **Rebuilt 2026-09-06**: a
+  live domain-restriction test found the EmailJS integration wasn't actually
+  protected against being called from anywhere — replaced with a real backend
+  route (`POST /login/request-access`) using the Resend integration `digest.py`
+  already had running. See `CLAUDE.md`.
+- **"Dismiss all" bulk action on `/bank/transactions`** — shipped 2026-09-05.
+  Checkbox per row via the HTML5 `form=` attribute (no nested `<form>`s needed,
+  each row already has its own match/spending forms) + a "Dismiss selected"
+  button. `POST /bank/transactions/dismiss-selected` loops over the submitted ids
+  the same way `apply_sync` already does for balance staging.
+- **Reconciliation / "catch-up" review workflow + dashboard mini balance-update
+  widget** — shipped 2026-09-06, merged into one item per the user's own framing
+  that they overlap ("make the existing function better, apply codex review").
+  Rather than a separate new screen: `/today/balance` now covers debts too
+  (previously accounts-only) and gained an "adjust by amount" mode — pick +/- and
+  an amount, the server does the arithmetic against the current balance instead of
+  you computing the new total (the actual "calculator feel" ask), same sign
+  convention for both accounts and debts. The dashboard's stale-balance alert now
+  lists each stale account/debt with its own inline one-field quick-update form,
+  so clearing everything stale happens in one pass on the dashboard itself. Bills
+  due / income to mark received / purchase payments were already all listed in the
+  existing "Update today" grid — the only genuine gaps were debt balance updates
+  and the "type the new absolute number" friction, both closed here.
 - **"Today" quick-action cockpit** (balance/payment/purchase/leak/mark-bill-paid, HTMX
   OOB summary refresh) — shipped, see `ARCHITECTURE.md`'s "Home is a cockpit, not just a
   summary" section.
