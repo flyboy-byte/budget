@@ -20,12 +20,29 @@ def cents_to_input_value(cents: int) -> str:
     return f"{sign}{dollars}.{remainder:02d}"
 
 
+# No real amount of money in this app should ever reach this -- it exists purely
+# to reject "1" followed by hundreds of zeros before it becomes a stored value,
+# not to model any plausible balance. Comfortably past anything a debt, account,
+# or purchase should ever hold, with room to spare.
+_MAX_ABS_DOLLARS = Decimal(10**15)
+
+
 def _parse_to_smallest_unit(value: str, error_detail: str) -> int:
     try:
-        scaled = Decimal(value) * 100
+        parsed = Decimal(value)
     except InvalidOperation:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail)
 
+    # Decimal("inf")/Decimal("Infinity") parse without raising InvalidOperation above,
+    # so they need their own check -- left unguarded, to_integral_exact() on an
+    # infinite value raises OverflowError converting it to an int, a 500 instead of
+    # the 400 every other malformed-amount path returns. A finite-but-astronomical
+    # value (e.g. "1" + 400 zeros) parses and converts to an int just fine; the bound
+    # below is what actually rejects it.
+    if not parsed.is_finite() or abs(parsed) > _MAX_ABS_DOLLARS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail)
+
+    scaled = parsed * 100
     exact = scaled.to_integral_exact()
     if exact != scaled:
         # e.g. "10.005" — sub-cent precision. to_integral_exact() would otherwise

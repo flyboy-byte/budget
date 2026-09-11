@@ -38,3 +38,29 @@ def test_format_cents():
     assert format_cents(123456) == "$1,234.56"
     assert format_cents(-500) == "-$5.00"
     assert format_cents(0) == "$0.00"
+
+
+# ----- infinite/oversized input (2026-09-11) -----
+# Decimal("inf")/Decimal("Infinity") parse without raising InvalidOperation, so they
+# passed the try/except and crashed later (OverflowError converting Infinity to an
+# int) instead of returning the 400 every other malformed-amount path returns.
+# A finite-but-astronomical value (1e400) sailed through entirely, producing a
+# hundreds-of-digits integer no money amount should ever be.
+
+@pytest.mark.parametrize("value", ["inf", "Infinity", "-inf", "-Infinity", "INF"])
+def test_parse_dollars_to_cents_rejects_infinity(value):
+    with pytest.raises(HTTPException) as exc_info:
+        parse_dollars_to_cents(value)
+    assert exc_info.value.status_code == 400
+
+
+def test_parse_dollars_to_cents_rejects_absurdly_large_amount():
+    with pytest.raises(HTTPException) as exc_info:
+        parse_dollars_to_cents("1" + "0" * 400)
+    assert exc_info.value.status_code == 400
+
+
+def test_parse_percent_to_bps_rejects_infinity():
+    with pytest.raises(HTTPException) as exc_info:
+        parse_percent_to_bps("inf")
+    assert exc_info.value.status_code == 400
