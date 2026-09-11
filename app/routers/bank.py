@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse
 
 from app import crypto
 from app.deps import get_csrf_token, get_current_user_id, get_db, verify_csrf_token
+from app.forms import parse_row_id, parse_target
 from app.repositories import accounts as accounts_repo
 from app.repositories import bank_sync as repo
 from app.repositories import committed_purchases as purchases_repo
@@ -328,7 +329,7 @@ async def apply_sync(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
     form = await request.form()
-    selected_ids = {int(v) for v in form.getlist("staging_id")}
+    selected_ids = {parse_row_id(v) for v in form.getlist("staging_id")}
 
     for staging in repo.list_unapplied_staging(db, user_id, connection_id):
         if staging["id"] not in selected_ids:
@@ -377,10 +378,7 @@ def set_link(
             target_type, target_id = "debt", debts_repo.create_debt(db, user_id, name, "other", 0, 0, "accruing")
             newly_created_debt_id = target_id
     elif target:
-        target_type, _, target_id_raw = target.partition(":")
-        if target_type not in ("account", "debt") or not target_id_raw:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-        target_id = int(target_id_raw)
+        target_type, target_id = parse_target(target, ("account", "debt"))
     else:
         target_type, target_id = None, None
 
@@ -445,10 +443,7 @@ def match_transaction(
     user_id: int = Depends(get_current_user_id),
     db: sqlite3.Connection = Depends(get_db),
 ):
-    target_type, _, target_id_raw = target.partition(":")
-    if target_type not in ("obligation", "purchase") or not target_id_raw:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    target_id = int(target_id_raw)
+    target_type, target_id = parse_target(target, ("obligation", "purchase"))
 
     try:
         if target_type == "obligation":
@@ -627,7 +622,7 @@ async def dismiss_selected_transactions(
     instead of raising, since a bulk action shouldn't fail the whole batch over one
     already-resolved row)."""
     form = await request.form()
-    selected_ids = {int(v) for v in form.getlist("staging_id")}
+    selected_ids = {parse_row_id(v) for v in form.getlist("staging_id")}
     for staging_id in selected_ids:
         repo.dismiss_transaction(db, user_id, staging_id)
     db.commit()

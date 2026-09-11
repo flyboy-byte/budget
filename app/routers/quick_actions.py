@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 
 from app.deps import get_csrf_token, get_current_user_id, get_db, verify_csrf_token
+from app.forms import parse_target
 from app.money import format_cents, parse_dollars_to_cents
 from app.repositories import accounts as accounts_repo
 from app.repositories import committed_purchases as purchases_repo
@@ -59,10 +60,7 @@ def quick_update_balance(
     A "+" always raises balance_cents and a "-" always lowers it, identically for
     both entity types (for a debt that means charging more vs. paying down); no
     per-type sign flipping needed since it operates on the raw stored number."""
-    target_type, _, target_id_raw = target.partition(":")
-    if target_type not in ("account", "debt") or not target_id_raw:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    target_id = int(target_id_raw)
+    target_type, target_id = parse_target(target, ("account", "debt"))
     amount_cents = parse_dollars_to_cents(amount)
 
     repo = accounts_repo if target_type == "account" else debts_repo

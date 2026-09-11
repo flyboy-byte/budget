@@ -526,3 +526,20 @@ def test_afford_check_scoped_to_requesting_user(client, db, user_id):
     # regardless of how much cash bob's account has.
     response = client.post("/today/afford", data={"csrf_token": csrf, "amount": "30.00"})
     assert "alert--error" in response.text
+
+
+# ----- malformed target (2026-09-11) -----
+# target is a user-supplied form field. A non-numeric or oversized id reached
+# int() unguarded and raised, turning a bad request into a 500.
+
+@pytest.mark.parametrize(
+    "target",
+    ["account:abc", "debt:1.5", "account:9999999999999999999999", "account:-", "debt:"],
+)
+def test_quick_update_balance_rejects_malformed_target(client, db, user_id, target):
+    csrf = get_csrf_token(client)
+    response = client.post(
+        "/today/balance",
+        data={"target": target, "amount": "10.00", "csrf_token": csrf},
+    )
+    assert response.status_code == 400

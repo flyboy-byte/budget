@@ -1289,3 +1289,60 @@ def test_deep_scan_surfaces_connection_errors_without_failing(client, db, user_i
     response = client.post("/bank/suggestions/scan", data={"csrf_token": csrf})
     assert response.status_code == 200
     assert "timed out" in response.text
+
+
+# ----- malformed ids from form fields (2026-09-11) -----
+# Same class as /today/balance's target: these come straight off a form, so a
+# non-numeric or oversized value must be a 400, not an uncaught int() -> 500.
+
+def test_set_link_target_rejects_malformed_target(client, db, user_id):
+    connection_id = _make_connection(db, user_id)
+    link_id = bank_sync_repo.upsert_link(db, user_id, connection_id, "sfin-1", "Checking")
+    db.commit()
+
+    csrf = get_csrf_token(client)
+    resp = client.post(
+        f"/bank/{connection_id}/links/{link_id}",
+        data={"csrf_token": csrf, "target": "account:abc"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+
+
+def test_match_transaction_rejects_malformed_target(client, db, user_id):
+    connection_id = _make_connection(db, user_id)
+    link_id = bank_sync_repo.upsert_link(db, user_id, connection_id, "sfin-1", "Checking")
+    db.commit()
+    staging_id = bank_sync_repo.create_staging_row(db, user_id, link_id, 77777)
+    db.commit()
+
+    csrf = get_csrf_token(client)
+    resp = client.post(
+        f"/bank/transactions/{staging_id}/match",
+        data={"csrf_token": csrf, "target": "obligation:not-a-number"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+
+
+def test_apply_rejects_malformed_staging_id(client, db, user_id):
+    connection_id = _make_connection(db, user_id)
+    db.commit()
+
+    csrf = get_csrf_token(client)
+    resp = client.post(
+        f"/bank/{connection_id}/apply",
+        data={"csrf_token": csrf, "staging_id": ["abc"]},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+
+
+def test_dismiss_selected_rejects_malformed_staging_id(client, db, user_id):
+    csrf = get_csrf_token(client)
+    resp = client.post(
+        "/bank/transactions/dismiss-selected",
+        data={"csrf_token": csrf, "staging_id": ["abc"]},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
