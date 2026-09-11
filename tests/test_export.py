@@ -235,3 +235,101 @@ def test_restore_still_accepts_valid_dates_and_nulls(db, user_id):
     backup = export.export_json_backup(db, user_id)
     export.restore_json_backup(db, user_id, backup)  # must not raise
     assert db.execute("SELECT COUNT(*) c FROM accounts WHERE user_id = ?", (user_id,)).fetchone()["c"] == 1
+
+
+# ----- backup column coverage (2026-09-11) -----
+# Columns added by later migrations were never added to TABLE_COLUMNS, so a
+# backup/restore round-trip silently dropped them. Each of these is real user
+# data or user-set state, not derived values.
+
+def test_backup_preserves_coarse_tracking_flag(db, user_id):
+    # migration 0013: per-debt flag, set by the user, exempts a high-churn debt
+    # from the dashboard's staleness nagging.
+    seed_data(db, user_id)
+    db.execute("UPDATE debts SET coarse_tracking = 1 WHERE user_id = ?", (user_id,))
+    db.commit()
+
+    backup = export.export_json_backup(db, user_id)
+    export.restore_json_backup(db, user_id, backup)
+    db.commit()
+
+    row = db.execute("SELECT coarse_tracking FROM debts WHERE user_id = ?", (user_id,)).fetchone()
+    assert row["coarse_tracking"] == 1
+
+
+def test_backup_preserves_transaction_spending_category(db, user_id):
+    # migration 0010: free-text spending category that replaced spending_leaks.
+    # Also feeds the category datalist via list_distinct_categories().
+    seed_data(db, user_id)
+    account_id = db.execute("SELECT id FROM accounts WHERE user_id = ?", (user_id,)).fetchone()["id"]
+    db.execute(
+        """INSERT INTO transactions (user_id, transaction_date, amount_cents, account_id,
+                                     target_type, category)
+           VALUES (?, '2026-09-01', 2500, ?, 'spending', 'groceries')""",
+        (user_id, account_id),
+    )
+    db.commit()
+
+    backup = export.export_json_backup(db, user_id)
+    export.restore_json_backup(db, user_id, backup)
+    db.commit()
+
+    row = db.execute("SELECT category FROM transactions WHERE user_id = ?", (user_id,)).fetchone()
+    assert row["category"] == "groceries"
+
+
+def test_backup_preserves_last_bill_push_date(db, user_id):
+    # migration 0009: push-reminder dedup state. Losing it re-fires a reminder
+    # the user was already sent.
+    seed_data(db, user_id)
+    db.execute("UPDATE obligations SET last_bill_push_date = '2026-09-10' WHERE user_id = ?", (user_id,))
+    db.commit()
+
+    backup = export.export_json_backup(db, user_id)
+    export.restore_json_backup(db, user_id, backup)
+    db.commit()
+
+    row = db.execute("SELECT last_bill_push_date FROM obligations WHERE user_id = ?", (user_id,)).fetchone()
+    assert row["last_bill_push_date"] == "2026-09-10"
+
+
+def test_restore_accepts_older_backup_missing_newer_columns(db, user_id):
+    # An older backup predates the columns above. Restoring it must still work and
+    # must fall back to each column's schema default, not insert NULL into a
+    # NOT NULL column (coarse_tracking).
+    seed_data(db, user_id)
+    backup = export.export_json_backup(db, user_id)
+    for row in backup["tables"]["debts"]:
+        row.pop("coarse_tracking", None)
+    for row in backup["tables"]["obligations"]:
+        row.pop("last_bill_push_date", None)
+
+    export.restore_json_backup(db, user_id, backup)  # must not raise
+    db.commit()
+
+    debt = db.execute("SELECT coarse_tracking FROM debts WHERE user_id = ?", (user_id,)).fetchone()
+    assert debt["coarse_tracking"] == 0
+
+
+def test_restore_rejects_malformed_updated_at(db, user_id):
+    # updated_at is round-tripped verbatim; before this was validated, a bad value
+    # made every screen reading it (dashboard, Money hub) raise on strptime.
+    backup = {
+        "version": export.BACKUP_VERSION,
+        "tables": {"accounts": [{"name": "Checking", "type": "checking",
+                                 "balance_cents": 100, "updated_at": "not-a-timestamp"}]},
+    }
+    with pytest.raises(export.RestoreError):
+        export.restore_json_backup(db, user_id, backup)
+
+
+def test_restore_accepts_timestamp_without_milliseconds(db, user_id):
+    # A near-miss format is readable and must not be rejected.
+    backup = {
+        "version": export.BACKUP_VERSION,
+        "tables": {"accounts": [{"name": "Checking", "type": "checking",
+                                 "balance_cents": 100, "updated_at": "2026-09-11T14:38:12Z"}]},
+    }
+    export.restore_json_backup(db, user_id, backup)  # must not raise
+    db.commit()
+    assert db.execute("SELECT COUNT(*) c FROM accounts WHERE user_id = ?", (user_id,)).fetchone()["c"] == 1

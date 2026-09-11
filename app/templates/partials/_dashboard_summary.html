@@ -21,7 +21,7 @@
       {{ safe_to_spend_cents | money }}
     </p>
     {% if is_stale %}
-      <p class="hero-stat__note mt-0">as of {{ stale_oldest_days }} day{{ 's' if stale_oldest_days != 1 else '' }} ago</p>
+      <p class="hero-stat__note mt-0">{% if stale_oldest_days is none %}last update unknown{% else %}as of {{ stale_oldest_days }} day{{ 's' if stale_oldest_days != 1 else '' }} ago{% endif %}</p>
     {% elif trend_delta_cents is not none %}
       <p class="hero-stat__note mt-0">
         <span class="{{ 'text-good' if trend_delta_cents >= 0 else 'text-bad' }}">
@@ -89,7 +89,7 @@
         <ul class="stale-row-list">
           {% for row in stale_rows %}
           <li class="stale-row">
-            <span>{{ row.name }} last updated {{ row.days }} day{{ 's' if row.days != 1 else '' }} ago</span>
+            <span>{{ row.name }} {% if row.days is none %}has no readable last-updated date{% else %}last updated {{ row.days }} day{{ 's' if row.days != 1 else '' }} ago{% endif %}</span>
             <form class="inline-form" hx-post="/today/balance" hx-target="#stale-result-{{ row.kind }}-{{ row.id }}" hx-swap="innerHTML">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="target" value="{{ row.kind }}:{{ row.id }}">
@@ -136,7 +136,7 @@
   </div>
   {% else %}
   <div class="{{ 'dim-stale' if is_stale }}">
-  {% if is_stale %}<p class="hero-stat__note mt-0">as of {{ stale_oldest_days }} day{{ 's' if stale_oldest_days != 1 else '' }} ago</p>{% endif %}
+  {% if is_stale %}<p class="hero-stat__note mt-0">{% if stale_oldest_days is none %}last update unknown{% else %}as of {{ stale_oldest_days }} day{{ 's' if stale_oldest_days != 1 else '' }} ago{% endif %}</p>{% endif %}
   <div class="card mt-0">
     <div class="compare-grid">
       <div>

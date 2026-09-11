@@ -27,6 +27,7 @@ from app.repositories import bank_sync as repo
 from app.repositories import debts as debts_repo
 from app.repositories import settings as settings_repo
 from app.services import bank_sync as bank_sync_service
+from app.services import dates
 from app.services import push as push_service
 from app.services.calc import DEFAULT_SETTINGS
 
@@ -83,10 +84,11 @@ def sync_connection(conn, user_id: int, connection_row, threshold_cents: int) ->
     connection_id = connection_row["id"]
     large_transactions = []
 
-    if connection_row["last_synced_at"]:
-        last_synced = datetime.strptime(
-            connection_row["last_synced_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
-        ).replace(tzinfo=timezone.utc)
+    # An unreadable last_synced_at falls through to syncing rather than stranding the
+    # connection -- same call as the web /bank/sync route, and the sync rewrites the
+    # column correctly, so it self-heals.
+    last_synced = dates.parse_db_timestamp(connection_row["last_synced_at"])
+    if last_synced is not None:
         if datetime.now(timezone.utc) - last_synced < _sync_cooldown(conn, user_id):
             return "skipped (cooldown)", large_transactions
 

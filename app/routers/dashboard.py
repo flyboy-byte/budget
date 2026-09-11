@@ -23,8 +23,14 @@ router = APIRouter()
 SPARKLINE_DAYS = 30
 
 
-def _row_age(row: sqlite3.Row) -> timedelta:
-    updated_at = datetime.strptime(row["updated_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+def _row_age(row: sqlite3.Row) -> timedelta | None:
+    """None when updated_at can't be read (only reachable via a restored backup --
+    see dates.parse_db_timestamp). Callers treat unknown as stale, but must not
+    invent a number for it: claiming a precise age the data doesn't support is the
+    one thing this app never does with a figure it shows."""
+    updated_at = dates.parse_db_timestamp(row["updated_at"])
+    if updated_at is None:
+        return None
     return datetime.now(timezone.utc) - updated_at
 
 
@@ -46,9 +52,12 @@ def _balance_freshness(accounts: list[sqlite3.Row], debts: list[sqlite3.Row], th
     # existing stale alert instead of a separate page -- see that item's DONE note).
     rows = [("account", row) for row in accounts] + [("debt", row) for row in tracked_debts]
     ages = [(kind, row, _row_age(row)) for kind, row in rows]
+    # age is None for an unreadable updated_at -- stale (we can't show it as current),
+    # but sorted to the top and rendered without a day count rather than given a
+    # made-up one.
     stale = sorted(
-        ((kind, row, age) for kind, row, age in ages if age > threshold),
-        key=lambda triple: -triple[2].total_seconds(),
+        ((kind, row, age) for kind, row, age in ages if age is None or age > threshold),
+        key=lambda triple: -(triple[2].total_seconds() if triple[2] is not None else float("inf")),
     )
     if not stale:
         return {"is_stale": False}
@@ -59,16 +68,22 @@ def _balance_freshness(accounts: list[sqlite3.Row], debts: list[sqlite3.Row], th
     # can still shift slightly from pure date-window effects (a bill rolling into/out of
     # the reserved window) with no balance edit at all -- not itemized further here, same
     # as the original §1.1 scoping note.
-    freshest_updated_at = max((row["updated_at"] for _, row in rows), default=None)
+    # Only timestamps we could actually parse can speak to "the last day anything real
+    # happened" -- an unreadable one tells us nothing, so it must not win this max().
+    freshest_updated_at = max(
+        (row["updated_at"] for _, row in rows if dates.parse_db_timestamp(row["updated_at"])),
+        default=None,
+    )
+    oldest_age = stale[0][2]
     return {
         "is_stale": True,
-        "stale_oldest_days": stale[0][2].days,
+        "stale_oldest_days": oldest_age.days if oldest_age is not None else None,
         "stale_rows": [
             {
                 "kind": kind,
                 "id": row["id"],
                 "name": row["name"],
-                "days": age.days,
+                "days": age.days if age is not None else None,
                 "balance_cents": row["balance_cents"],
             }
             for kind, row, age in stale

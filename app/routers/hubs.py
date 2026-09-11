@@ -16,7 +16,7 @@ from app.repositories import income_events as income_repo
 from app.repositories import obligations as obligations_repo
 from app.repositories import snapshots as snapshots_repo
 from app.repositories import transactions as transactions_repo
-from app.services import bill_detection, calc
+from app.services import bill_detection, calc, dates
 from app.templating import templates
 
 router = APIRouter()
@@ -31,7 +31,11 @@ def _is_stale_row(row: sqlite3.Row, threshold: timedelta = STALE_THRESHOLD) -> b
     trade-off. updated_at is bumped on every write path (manual edit, quick
     balance update, bank-sync apply), so this clears itself the moment the row
     is actually touched."""
-    updated_at = datetime.strptime(row["updated_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+    updated_at = dates.parse_db_timestamp(row["updated_at"])
+    if updated_at is None:
+        # Unreadable timestamp (only reachable via a restored backup) is no evidence
+        # the row is current -- flag it rather than silently vouching for it.
+        return True
     return datetime.now(timezone.utc) - updated_at > threshold
 
 

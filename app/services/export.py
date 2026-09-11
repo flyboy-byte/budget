@@ -9,6 +9,8 @@ import re
 import sqlite3
 from datetime import date, datetime, timezone
 
+from app.services import dates
+
 BACKUP_VERSION = 1
 
 # Explicit column lists (not SELECT *) so we never try to write the generated
@@ -18,11 +20,13 @@ TABLE_COLUMNS = {
     "accounts": ["id", "name", "type", "balance_cents", "is_active", "display_order", "notes", "created_at", "updated_at"],
     "debts": [
         "id", "name", "type", "balance_cents", "apr_bps", "minimum_payment_cents", "next_due_date",
-        "interest_status", "is_flexible_payment", "priority", "is_active", "notes", "created_at", "updated_at",
+        "interest_status", "is_flexible_payment", "priority", "is_active", "notes", "coarse_tracking",
+        "created_at", "updated_at",
     ],
     "obligations": [
         "id", "name", "category", "amount_cents", "is_recurring", "recurrence_rule", "due_date",
-        "is_required", "is_paid", "paid_date", "auto_pay", "notes", "created_at", "updated_at",
+        "is_required", "is_paid", "paid_date", "auto_pay", "notes", "last_bill_push_date",
+        "created_at", "updated_at",
     ],
     "committed_purchases": [
         "id", "name", "category", "amount_cents", "amount_paid_cents", "status", "order_date",
@@ -35,7 +39,7 @@ TABLE_COLUMNS = {
     ],
     "transactions": [
         "id", "transaction_date", "amount_cents", "account_id", "target_type", "debt_id",
-        "obligation_id", "committed_purchase_id", "memo", "created_at",
+        "obligation_id", "committed_purchase_id", "category", "memo", "created_at",
     ],
     "snapshots": [
         "id", "snapshot_date", "cash_on_hand_cents", "total_debt_cents", "net_position_cents",
@@ -158,6 +162,14 @@ _DATE_COLUMNS = {
 }
 
 
+# created_at/updated_at/last_synced_at are round-tripped verbatim through a backup,
+# so a hand-edited one can carry any string at all. Every screen that reads them goes
+# through dates.parse_db_timestamp, which degrades to "treat as stale" rather than
+# raising -- this is the second layer, keeping the bad value out of the DB to begin
+# with (same two-layer shape as the snapshot_date escaping fix).
+_TIMESTAMP_COLUMNS = {"created_at", "updated_at", "last_synced_at"}
+
+
 def _reject_malformed_dates(backup: dict) -> None:
     for table, rows in (backup.get("tables") or {}).items():
         if not isinstance(rows, list):
@@ -173,6 +185,11 @@ def _reject_malformed_dates(backup: dict) -> None:
                         raise RestoreError(
                             f"{table}.{column} is not a valid ISO-8601 date: {str(value)[:40]!r}"
                         ) from None
+                elif column in _TIMESTAMP_COLUMNS and value not in (None, ""):
+                    if dates.parse_db_timestamp(value) is None:
+                        raise RestoreError(
+                            f"{table}.{column} is not a valid timestamp: {str(value)[:40]!r}"
+                        )
 
 
 def restore_json_backup(conn: sqlite3.Connection, user_id: int, backup: dict) -> None:
@@ -200,8 +217,6 @@ def restore_json_backup(conn: sqlite3.Connection, user_id: int, backup: dict) ->
         columns = TABLE_COLUMNS[table]
         has_id = "id" in columns
         insert_columns = [c for c in columns if c != "id"]
-        col_list = ", ".join(insert_columns)
-        placeholders = ", ".join("?" for _ in insert_columns)
 
         for row in backup["tables"].get(table, []):
             values = dict(row)
@@ -211,9 +226,18 @@ def restore_json_backup(conn: sqlite3.Connection, user_id: int, backup: dict) ->
                     if old_id is not None:
                         values[fk_column] = id_maps.get(referenced_table, {}).get(old_id)
 
-            insert_values = tuple(values.get(c) for c in insert_columns)
+            # Only name the columns this row actually carries. A backup taken before
+            # a column existed (coarse_tracking, last_bill_push_date, category) simply
+            # omits the key -- leaving it out of the INSERT lets SQLite apply the
+            # column's own DEFAULT, where passing None would violate a NOT NULL
+            # constraint (coarse_tracking) or overwrite a default with NULL.
+            row_columns = [c for c in insert_columns if c in values]
+            col_list = ", ".join(row_columns)
+            placeholders = ", ".join("?" for _ in row_columns)
+            insert_values = tuple(values[c] for c in row_columns)
             cur = conn.execute(
-                f"INSERT INTO {table} (user_id, {col_list}) VALUES (?, {placeholders})",
+                f"INSERT INTO {table} (user_id{', ' + col_list if col_list else ''})"
+                f" VALUES (?{', ' + placeholders if placeholders else ''})",
                 (user_id, *insert_values),
             )
             if has_id and row.get("id") is not None:

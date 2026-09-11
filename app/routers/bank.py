@@ -23,6 +23,7 @@ from app.repositories import transactions as transactions_repo
 from app.services import bank_sync as bank_sync_service
 from app.services import bank_transactions as bank_transactions_service
 from app.services import bill_detection
+from app.services import dates
 from app.services.calc import DEFAULT_SETTINGS
 from app.templating import templates
 
@@ -99,9 +100,11 @@ def _is_stale(conn_row: sqlite3.Row, cooldown: timedelta) -> bool:
     catches a silently-broken cron job before it goes unnoticed for weeks."""
     if conn_row["status"] != "active" or not conn_row["last_synced_at"]:
         return False
-    last_synced = datetime.strptime(conn_row["last_synced_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(
-        tzinfo=timezone.utc
-    )
+    last_synced = dates.parse_db_timestamp(conn_row["last_synced_at"])
+    if last_synced is None:
+        # Can't read when it last ran -- that's exactly the silently-broken case
+        # this warning exists to catch, so surface it.
+        return True
     return datetime.now(timezone.utc) - last_synced > cooldown * 2
 
 
@@ -203,10 +206,11 @@ def sync_connection(
     if connection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    if connection["last_synced_at"]:
-        last_synced = datetime.strptime(connection["last_synced_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(
-            tzinfo=timezone.utc
-        )
+    last_synced = dates.parse_db_timestamp(connection["last_synced_at"])
+    # An unreadable last_synced_at falls through to syncing, same as a never-synced
+    # connection: blocking instead would strand the connection permanently, and the
+    # sync itself rewrites last_synced_at correctly, so this self-heals on first use.
+    if last_synced is not None:
         if datetime.now(timezone.utc) - last_synced < _sync_cooldown(db, user_id):
             return RedirectResponse(url="/bank", status_code=status.HTTP_303_SEE_OTHER)
 
